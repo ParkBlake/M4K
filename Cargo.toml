@@ -9,7 +9,7 @@ name = "pi5_chess"
 path = "src/lib.rs"
 
 [[bin]]
-name = "pi5_engine"
+name = "m4k_engine"
 path = "src/bin/engine.rs"
 
 [dependencies]
