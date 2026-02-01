@@ -41,10 +41,10 @@ rustflags = [
     "-C", "target-feature=+neon,+fp-armv8,+crc",
 ]
 
-[[bench]]
-name = "bitboard_bench"
-harness = false
+# [[bench]]
+# name = "bitboard_bench"
+# harness = false
 
-[[bench]]
-name = "search_bench"
-harness = false
+# [[bench]]
+# name = "search_bench"
+# harness = false
