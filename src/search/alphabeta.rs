@@ -67,17 +67,89 @@ pub fn alpha_beta_search(
         return result;
     }
 
-    // Generate moves (placeholder - would need position)
+    // Generate pseudo-legal moves
+    use crate::bitboard::Piece;
+    use crate::movegen::generator::*;
+    use crate::movegen::legal::filter_legal_moves;
+
     let mut moves = MoveList::new();
-    // generate_moves(&mut moves, position);
+    let color = color;
+    let occupied = (0..6).fold(crate::bitboard::Bitboard::EMPTY, |acc, p| {
+        acc | position.piece_bb(Piece::from_u8(p).unwrap(), crate::bitboard::Color::White)
+            | position.piece_bb(Piece::from_u8(p).unwrap(), crate::bitboard::Color::Black)
+    });
+    let enemies = (0..6).fold(crate::bitboard::Bitboard::EMPTY, |acc, p| {
+        acc | position.piece_bb(Piece::from_u8(p).unwrap(), color.opposite())
+    });
+
+    generate_pawn_moves(
+        &mut moves,
+        position.piece_bb(Piece::Pawn, color),
+        occupied,
+        enemies,
+        color,
+        position.en_passant,
+    );
+    generate_knight_moves(
+        &mut moves,
+        position.piece_bb(Piece::Knight, color),
+        occupied,
+        enemies,
+    );
+    generate_bishop_moves(
+        &mut moves,
+        position.piece_bb(Piece::Bishop, color),
+        occupied,
+        enemies,
+    );
+    generate_rook_moves(
+        &mut moves,
+        position.piece_bb(Piece::Rook, color),
+        occupied,
+        enemies,
+    );
+    generate_queen_moves(
+        &mut moves,
+        position.piece_bb(Piece::Queen, color),
+        occupied,
+        enemies,
+    );
+    if let Some(king_sq) = position.piece_bb(Piece::King, color).lsb() {
+        generate_king_moves(&mut moves, king_sq, occupied, enemies);
+    }
+
+    // Filter legal moves
+    let king_sq = position
+        .piece_bb(Piece::King, color)
+        .lsb()
+        .unwrap_or(crate::bitboard::Square::E1);
+    let enemy_attacks = crate::bitboard::Bitboard::EMPTY; // TODO: Compute real enemy attacks for legality
+    let legal_moves = filter_legal_moves(
+        &moves,
+        position.piece_bb(Piece::Pawn, color)
+            | position.piece_bb(Piece::Knight, color)
+            | position.piece_bb(Piece::Bishop, color)
+            | position.piece_bb(Piece::Rook, color)
+            | position.piece_bb(Piece::Queen, color)
+            | position.piece_bb(Piece::King, color),
+        position.piece_bb(Piece::Pawn, color.opposite())
+            | position.piece_bb(Piece::Knight, color.opposite())
+            | position.piece_bb(Piece::Bishop, color.opposite())
+            | position.piece_bb(Piece::Rook, color.opposite())
+            | position.piece_bb(Piece::Queen, color.opposite())
+            | position.piece_bb(Piece::King, color.opposite()),
+        occupied,
+        king_sq,
+        enemy_attacks,
+    );
 
     let mut best_score = i32::MIN;
     let mut best_move = None;
     let mut node_type = crate::search::transposition::NodeType::Upper;
 
-    for mv in moves.iter() {
-        // Make move (placeholder)
-        // make_move(position, mv);
+    for &mv in legal_moves.iter() {
+        let mut child_position = position.clone();
+        let undo = child_position.make_move(mv);
 
         // Recursive search with negated score
         let child_result = alpha_beta_search(
@@ -87,18 +159,17 @@ pub fn alpha_beta_search(
             color.opposite(),
             tt,
             evaluator,
-            position,
+            &child_position,
         );
 
         let score = -child_result.score;
         result.nodes_searched += child_result.nodes_searched;
 
-        // Unmake move (placeholder)
-        // unmake_move(position, mv);
+        child_position.unmake_move(undo);
 
         if score > best_score {
             best_score = score;
-            best_move = Some(*mv);
+            best_move = Some(mv);
         }
 
         alpha = alpha.max(score);

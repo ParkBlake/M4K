@@ -20,7 +20,7 @@ pub fn quiescence_search(
 ) -> i32 {
     // Stand pat: evaluate the current position
     let stand_pat = evaluator.evaluate(position);
-    let stand_pat = if color == Color::White {
+    let stand_pat = if color == crate::bitboard::Color::White {
         stand_pat
     } else {
         -stand_pat
@@ -34,19 +34,80 @@ pub fn quiescence_search(
     // Update alpha with stand pat
     alpha = alpha.max(stand_pat);
 
-    // Generate capture moves (placeholder - would need position)
-    let mut captures = Vec::new();
-    // generate_captures(&mut captures, position);
+    // Generate all capture moves
+    use crate::bitboard::Piece;
+    use crate::movegen::generator::*;
+    use crate::movegen::legal::filter_legal_moves;
+
+    let mut captures = crate::movegen::MoveList::new();
+    let occupied = (0..6).fold(crate::bitboard::Bitboard::EMPTY, |acc, p| {
+        acc | position.piece_bb(Piece::from_u8(p).unwrap(), crate::bitboard::Color::White)
+            | position.piece_bb(Piece::from_u8(p).unwrap(), crate::bitboard::Color::Black)
+    });
+    let enemies = (0..6).fold(crate::bitboard::Bitboard::EMPTY, |acc, p| {
+        acc | position.piece_bb(Piece::from_u8(p).unwrap(), color.opposite())
+    });
+
+    // Only generate captures for each piece type
+    generate_pawn_moves(
+        &mut captures,
+        position.piece_bb(Piece::Pawn, color),
+        occupied,
+        enemies,
+        color,
+        position.en_passant,
+    );
+    generate_knight_moves(
+        &mut captures,
+        position.piece_bb(Piece::Knight, color),
+        occupied,
+        enemies,
+    );
+    generate_bishop_moves(
+        &mut captures,
+        position.piece_bb(Piece::Bishop, color),
+        occupied,
+        enemies,
+    );
+    generate_rook_moves(
+        &mut captures,
+        position.piece_bb(Piece::Rook, color),
+        occupied,
+        enemies,
+    );
+    generate_queen_moves(
+        &mut captures,
+        position.piece_bb(Piece::Queen, color),
+        occupied,
+        enemies,
+    );
+    if let Some(king_sq) = position.piece_bb(Piece::King, color).lsb() {
+        generate_king_moves(&mut captures, king_sq, occupied, enemies);
+    }
+
+    // Filter only capturing moves
+    let captures: Vec<_> = captures
+        .iter()
+        .cloned()
+        .filter(|mv| {
+            // A move is a capture if the destination square is occupied by an enemy piece
+            let to = mv.to();
+            (0..6).any(|p| {
+                position
+                    .piece_bb(Piece::from_u8(p).unwrap(), color.opposite())
+                    .is_occupied(to)
+            }) || mv.is_en_passant()
+        })
+        .collect();
 
     for mv in captures {
-        // Make capture (placeholder)
-        // make_move(position, mv);
+        let mut child_position = position.clone();
+        let undo = child_position.make_move(mv);
 
         // Recursive quiescence search
-        let score = -quiescence_search(-beta, -alpha, color.opposite(), evaluator, position);
+        let score = -quiescence_search(-beta, -alpha, color.opposite(), evaluator, &child_position);
 
-        // Unmake capture (placeholder)
-        // unmake_move(position, mv);
+        child_position.unmake_move(undo);
 
         // Beta cutoff
         if score >= beta {
