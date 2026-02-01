@@ -80,7 +80,6 @@ impl UciEngine {
 
             // Check for search result immediately after handling command
             if let Ok(result) = self.result_receiver.try_recv() {
-                eprintln!("DEBUG: Received search result: best_move={:?}", result.best_move);
                 if let Some(mv) = result.best_move {
                     println!("bestmove {}", mv);
                     stdout.flush().unwrap();
@@ -134,7 +133,23 @@ impl UciEngine {
                 }
                 None
             }
-            Some(UciCommand::Quit) => None,
+            Some(UciCommand::Quit) => {
+                // Wait for any pending search results before quitting
+                if let Some(handle) = self.search_handle.take() {
+                    let _ = handle.join();
+                }
+                // Try to get the final result
+                if let Ok(result) = self.result_receiver.try_recv() {
+                    if let Some(mv) = result.best_move {
+                        println!("bestmove {}", mv);
+                        io::stdout().flush().unwrap();
+                    } else if let Some(fallback_mv) = self.generate_emergency_move() {
+                        println!("bestmove {}", fallback_mv);
+                        io::stdout().flush().unwrap();
+                    }
+                }
+                None
+            }
             None => Some(format!("info string Unknown command: {}", command.split_whitespace().next().unwrap_or(""))),
         }
     }
@@ -159,7 +174,6 @@ impl UciEngine {
 
     /// Start search in a separate thread
     fn start_search(&mut self) {
-        eprintln!("DEBUG: Starting search");
         self.stop_flag.store(false, Ordering::Relaxed);
         let stop_flag_clone = Arc::clone(&self.stop_flag);
         let position = self.position.clone();
@@ -169,7 +183,6 @@ impl UciEngine {
         let sender = self.result_sender.clone();
 
         self.search_handle = Some(thread::spawn(move || {
-            eprintln!("DEBUG: Search thread started");
             // Set a hard timeout to prevent infinite searches (5 minutes max)
             let search_timeout = if time_control.infinite {
                 Duration::from_secs(300) // 5 minutes for infinite searches
@@ -181,7 +194,6 @@ impl UciEngine {
 
             // Run search with timeout
             let result = iterative_deepening(&time_control, position.side_to_move, &mut tt, &evaluator, &position, &stop_flag_clone);
-            eprintln!("DEBUG: Search completed, sending result: best_move={:?}", result.best_move);
 
             // If search took too long, force stop flag
             if start_time.elapsed() > search_timeout {
@@ -189,7 +201,6 @@ impl UciEngine {
             }
 
             let _ = sender.send(result);
-            eprintln!("DEBUG: Result sent");
         }));
     }
 
