@@ -166,70 +166,20 @@ pub fn pawn_attacks(square: Square, color: Color) -> Bitboard {
     PAWN_ATTACKS[color as usize][square.0 as usize]
 }
 
-/// Generate bishop attacks using classical approach (no magic bitboards yet)
-/// This is a placeholder implementation that will be replaced with magic bitboards
+/// Generate bishop attacks using magic bitboards
 pub fn bishop_attacks(square: Square, occupied: Bitboard) -> Bitboard {
-    let mut attacks = Bitboard::EMPTY;
-    let sq = square.0 as i32;
-
-    // Directions: up-left, up-right, down-left, down-right
-    let directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)];
-
-    for &(dr, df) in &directions {
-        let mut r = (sq / 8) + dr;
-        let mut f = (sq % 8) + df;
-
-        while r >= 0 && r < 8 && f >= 0 && f < 8 {
-            let target_sq = (r * 8 + f) as u8;
-            attacks.0 |= 1u64 << target_sq;
-
-            // Stop if we hit a piece
-            if occupied.is_occupied(Square(target_sq)) {
-                break;
-            }
-
-            r += dr;
-            f += df;
-        }
-    }
-
-    attacks
+    unsafe { crate::bitboard::magic::bishop_attacks_magic(square, occupied) }
 }
 
-/// Generate rook attacks using classical approach (no magic bitboards yet)
-/// This is a placeholder implementation that will be replaced with magic bitboards
+/// Generate rook attacks using magic bitboards
 pub fn rook_attacks(square: Square, occupied: Bitboard) -> Bitboard {
-    let mut attacks = Bitboard::EMPTY;
-    let sq = square.0 as i32;
-
-    // Directions: up, down, left, right
-    let directions = [(-1, 0), (1, 0), (0, -1), (0, 1)];
-
-    for &(dr, df) in &directions {
-        let mut r = (sq / 8) + dr;
-        let mut f = (sq % 8) + df;
-
-        while r >= 0 && r < 8 && f >= 0 && f < 8 {
-            let target_sq = (r * 8 + f) as u8;
-            attacks.0 |= 1u64 << target_sq;
-
-            // Stop if we hit a piece
-            if occupied.is_occupied(Square(target_sq)) {
-                break;
-            }
-
-            r += dr;
-            f += df;
-        }
-    }
-
-    attacks
+    unsafe { crate::bitboard::magic::rook_attacks_magic(square, occupied) }
 }
 
 /// Generate queen attacks (combination of bishop and rook)
 #[inline(always)]
 pub fn queen_attacks(square: Square, occupied: Bitboard) -> Bitboard {
-    bishop_attacks(square, occupied) | rook_attacks(square, occupied)
+    unsafe { crate::bitboard::magic::queen_attacks_magic(square, occupied) }
 }
 
 #[cfg(test)]

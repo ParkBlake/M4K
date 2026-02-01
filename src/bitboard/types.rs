@@ -35,10 +35,20 @@ impl Bitboard {
     pub const FILE_G: Bitboard = Bitboard(0x4040_4040_4040_4040);
     pub const FILE_H: Bitboard = Bitboard(0x8080_8080_8080_8080);
 
-    /// Create a bitboard from a square
+    /// Create a bitboard for a file (0-7)
     #[inline(always)]
-    pub const fn from_square(sq: Square) -> Self {
-        Bitboard(1u64 << sq.0)
+    pub const fn file(file: u8) -> Self {
+        match file {
+            0 => Bitboard::FILE_A,
+            1 => Bitboard::FILE_B,
+            2 => Bitboard::FILE_C,
+            3 => Bitboard::FILE_D,
+            4 => Bitboard::FILE_E,
+            5 => Bitboard::FILE_F,
+            6 => Bitboard::FILE_G,
+            7 => Bitboard::FILE_H,
+            _ => Bitboard::EMPTY,
+        }
     }
 
     /// Check if a square is occupied
@@ -277,7 +287,7 @@ impl Square {
     /// Convert to bitboard
     #[inline(always)]
     pub const fn to_bitboard(self) -> Bitboard {
-        Bitboard::from_square(self)
+        Bitboard(1u64 << self.0)
     }
 }
 

@@ -1,13 +1,19 @@
 [build]
-target = "aarch64-unknown-linux-gnu"
+# We don't need to specify the target string if we are building natively
+# Removing the target line makes it more portable
 
 [target.aarch64-unknown-linux-gnu]
-linker = "aarch64-linux-gnu-gcc"
+# Use the standard system linker
+linker = "gcc"
+
 rustflags = [
-    "-C", "target-cpu=cortex-a76",
+    "-C", "target-cpu=native",  # "native" will automatically pick cortex-a76 on Pi 5
     "-C", "target-feature=+neon,+fp-armv8,+crc,+aes,+sha2",
-    "-C", "link-arg=-fuse-ld=lld",
+    "-C", "opt-level=3",        # Maximum optimization for chess
 ]
 
 [profile.release]
 debug = false
+lto = true             # Link Time Optimization (huge for chess performance)
+codegen-units = 1      # Better optimizations, slower compile time
+panic = "abort"        # Reduces binary size and adds a tiny bit of speed

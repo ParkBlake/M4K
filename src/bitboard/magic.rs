@@ -61,38 +61,38 @@ fn bishop_relevant_mask(square: Square) -> Bitboard {
 
     // Up-left
     let mut r = rank + 1;
-    let mut f = file + 1;
-    while r < 7 && f < 7 {
-        mask.set(Square((r * 8 + f) as u8));
-        r += 1;
-        f += 1;
-    }
-
-    // Up-right
-    r = rank + 1;
-    f = file - 1;
+    let mut f = file - 1;
     while r < 7 && f > 0 {
         mask.set(Square((r * 8 + f) as u8));
         r += 1;
         f -= 1;
     }
 
-    // Down-left
-    r = rank - 1;
+    // Up-right
+    r = rank + 1;
     f = file + 1;
-    while r > 0 && f < 7 {
+    while r < 7 && f < 7 {
         mask.set(Square((r * 8 + f) as u8));
-        r -= 1;
+        r += 1;
         f += 1;
     }
 
-    // Down-right
+    // Down-left
     r = rank - 1;
     f = file - 1;
     while r > 0 && f > 0 {
         mask.set(Square((r * 8 + f) as u8));
         r -= 1;
         f -= 1;
+    }
+
+    // Down-right
+    r = rank - 1;
+    f = file + 1;
+    while r > 0 && f < 7 {
+        mask.set(Square((r * 8 + f) as u8));
+        r -= 1;
+        f += 1;
     }
 
     mask
@@ -139,6 +139,44 @@ fn rook_relevant_mask(square: Square) -> Bitboard {
     mask
 }
 
+/// Find a magic number for a given mask and attack function
+fn find_magic(mask: Bitboard, attack_fn: fn(Square, Bitboard) -> Bitboard, square: Square) -> u64 {
+    let bits = mask.count();
+    let num_subsets = 1u64 << bits;
+    let mut attacks = vec![Bitboard::EMPTY; num_subsets as usize];
+    let mut occupancies = vec![0u64; num_subsets as usize];
+
+    // Generate all subsets and their attacks
+    for i in 0..num_subsets {
+        let occupied = pdep_neon(i, mask.0);
+        occupancies[i as usize] = occupied;
+        attacks[i as usize] = attack_fn(square, Bitboard(occupied));
+    }
+
+    // Try random magic numbers until we find one that works
+    use std::collections::HashSet;
+    loop {
+        let magic = rand::random::<u64>() & rand::random::<u64>() & rand::random::<u64>();
+        if (magic.wrapping_mul(mask.0)).count_ones() < 6 {
+            continue; // Bad magic
+        }
+
+        let mut used = HashSet::new();
+        let mut ok = true;
+        for i in 0..num_subsets {
+            let index = (occupancies[i as usize].wrapping_mul(magic) >> (64 - bits)) as usize;
+            if used.contains(&index) {
+                ok = false;
+                break;
+            }
+            used.insert(index);
+        }
+        if ok {
+            return magic;
+        }
+    }
+}
+
 /// Initialize bishop attack tables
 unsafe fn init_bishop_attacks() {
     let mut offset = 0;
@@ -146,30 +184,23 @@ unsafe fn init_bishop_attacks() {
     for sq in 0..64 {
         let square = Square(sq as u8);
         let mask = bishop_relevant_mask(square);
-        let magic = 0x100020410080400; // Placeholder
+        let magic = find_magic(mask, generate_bishop_attacks_slow, square);
         let shift = mask.count() as u32;
 
         BISHOP_MAGICS[sq] = MagicEntry {
             magic,
             mask,
             shift,
-            offset: 0,
+            offset,
         };
 
-        let entry = &BISHOP_MAGICS[sq];
-
-        // Update offset
-        let mut magic_entry = BISHOP_MAGICS[sq];
-        magic_entry.offset = offset;
-        BISHOP_MAGICS[sq] = magic_entry;
-
         // Generate all possible subsets of the mask
-        let num_subsets = 1u64 << entry.mask.count();
+        let num_subsets = 1u64 << mask.count();
         for subset_idx in 0..num_subsets {
-            let occupied = pdep_neon(subset_idx, entry.mask.0);
+            let occupied = pdep_neon(subset_idx, mask.0);
             let attacks = generate_bishop_attacks_slow(square, Bitboard(occupied));
             let index =
-                (occupied.wrapping_mul(entry.magic) >> (64 - entry.shift)) as usize + offset;
+                (occupied.wrapping_mul(magic) >> (64 - shift)) as usize + offset;
             BISHOP_ATTACKS[index] = attacks;
         }
 
@@ -184,28 +215,22 @@ unsafe fn init_rook_attacks() {
     for sq in 0..64 {
         let square = Square(sq as u8);
         let mask = rook_relevant_mask(square);
-        let magic = 0x8000100040002000; // Placeholder
+        let magic = find_magic(mask, generate_rook_attacks_slow, square);
         let shift = mask.count() as u32;
 
         ROOK_MAGICS[sq] = MagicEntry {
             magic,
             mask,
             shift,
-            offset: 0,
+            offset,
         };
 
-        let entry = &ROOK_MAGICS[sq];
-
-        let mut magic_entry = ROOK_MAGICS[sq];
-        magic_entry.offset = offset;
-        ROOK_MAGICS[sq] = magic_entry;
-
-        let num_subsets = 1u64 << entry.mask.count();
+        let num_subsets = 1u64 << mask.count();
         for subset_idx in 0..num_subsets {
-            let occupied = pdep_neon(subset_idx, entry.mask.0);
+            let occupied = pdep_neon(subset_idx, mask.0);
             let attacks = generate_rook_attacks_slow(square, Bitboard(occupied));
             let index =
-                (occupied.wrapping_mul(entry.magic) >> (64 - entry.shift)) as usize + offset;
+                (occupied.wrapping_mul(magic) >> (64 - shift)) as usize + offset;
             ROOK_ATTACKS[index] = attacks;
         }
 

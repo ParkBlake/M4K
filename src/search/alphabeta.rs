@@ -3,10 +3,11 @@
 //! This module implements the alpha-beta pruning algorithm for chess search.
 
 use super::quiescence::quiescence_search;
-use crate::bitboard::Color;
+use crate::bitboard::{Bitboard, Color};
 use crate::eval::Evaluator;
 use crate::movegen::{Move, MoveList};
 use crate::search::transposition::{TTEntry, TranspositionTable};
+use crate::uci::commands::TimeControl;
 
 /// Search result containing the best move and score
 #[derive(Clone, Copy)]
@@ -14,6 +15,55 @@ pub struct SearchResult {
     pub best_move: Option<Move>,
     pub score: i32,
     pub nodes_searched: u64,
+}
+
+/// Compute attacks by enemy pieces
+fn compute_enemy_attacks(position: &crate::bitboard::position::Position, enemy_color: Color) -> Bitboard {
+    use crate::bitboard::{attacks, Piece};
+    let occupied = (0..6).fold(Bitboard::EMPTY, |acc, p| {
+        acc | position.piece_bb(Piece::from_u8(p).unwrap(), crate::bitboard::Color::White)
+            | position.piece_bb(Piece::from_u8(p).unwrap(), crate::bitboard::Color::Black)
+    });
+
+    let mut enemy_attacks = Bitboard::EMPTY;
+
+    // Pawn attacks
+    let enemy_pawns = position.piece_bb(Piece::Pawn, enemy_color);
+    for sq in enemy_pawns.iter() {
+        enemy_attacks |= attacks::pawn_attacks(sq, enemy_color);
+    }
+
+    // Knight attacks
+    let enemy_knights = position.piece_bb(Piece::Knight, enemy_color);
+    for sq in enemy_knights.iter() {
+        enemy_attacks |= attacks::knight_attacks(sq);
+    }
+
+    // Bishop attacks
+    let enemy_bishops = position.piece_bb(Piece::Bishop, enemy_color);
+    for sq in enemy_bishops.iter() {
+        enemy_attacks |= attacks::bishop_attacks(sq, occupied);
+    }
+
+    // Rook attacks
+    let enemy_rooks = position.piece_bb(Piece::Rook, enemy_color);
+    for sq in enemy_rooks.iter() {
+        enemy_attacks |= attacks::rook_attacks(sq, occupied);
+    }
+
+    // Queen attacks
+    let enemy_queens = position.piece_bb(Piece::Queen, enemy_color);
+    for sq in enemy_queens.iter() {
+        enemy_attacks |= attacks::queen_attacks(sq, occupied);
+    }
+
+    // King attacks
+    let enemy_king = position.piece_bb(Piece::King, enemy_color);
+    for sq in enemy_king.iter() {
+        enemy_attacks |= attacks::king_attacks(sq);
+    }
+
+    enemy_attacks
 }
 
 /// Alpha-beta search with transposition table
@@ -74,7 +124,7 @@ pub fn alpha_beta_search(
 
     let mut moves = MoveList::new();
     let color = color;
-    let occupied = (0..6).fold(crate::bitboard::Bitboard::EMPTY, |acc, p| {
+    let occupied = (0..6).fold(Bitboard::EMPTY, |acc, p| {
         acc | position.piece_bb(Piece::from_u8(p).unwrap(), crate::bitboard::Color::White)
             | position.piece_bb(Piece::from_u8(p).unwrap(), crate::bitboard::Color::Black)
     });
@@ -123,24 +173,12 @@ pub fn alpha_beta_search(
         .piece_bb(Piece::King, color)
         .lsb()
         .unwrap_or(crate::bitboard::Square::E1);
-    let enemy_attacks = crate::bitboard::Bitboard::EMPTY; // TODO: Compute real enemy attacks for legality
+    // Compute enemy attacks for legality check
+    let enemy_attacks = compute_enemy_attacks(position, color.opposite());
     let legal_moves = filter_legal_moves(
         &moves,
-        position.piece_bb(Piece::Pawn, color)
-            | position.piece_bb(Piece::Knight, color)
-            | position.piece_bb(Piece::Bishop, color)
-            | position.piece_bb(Piece::Rook, color)
-            | position.piece_bb(Piece::Queen, color)
-            | position.piece_bb(Piece::King, color),
-        position.piece_bb(Piece::Pawn, color.opposite())
-            | position.piece_bb(Piece::Knight, color.opposite())
-            | position.piece_bb(Piece::Bishop, color.opposite())
-            | position.piece_bb(Piece::Rook, color.opposite())
-            | position.piece_bb(Piece::Queen, color.opposite())
-            | position.piece_bb(Piece::King, color.opposite()),
-        occupied,
-        king_sq,
-        enemy_attacks,
+        position,
+        color,
     );
 
     let mut best_score = i32::MIN;
@@ -201,12 +239,13 @@ pub fn alpha_beta_search(
 
 /// Iterative deepening alpha-beta search
 pub fn iterative_deepening(
-    max_depth: i32,
+    time_control: &TimeControl,
     color: Color,
     tt: &mut TranspositionTable,
     evaluator: &Evaluator,
     position: &crate::bitboard::position::Position,
 ) -> SearchResult {
+    let max_depth = time_control.depth.unwrap_or(4) as i32;
     let mut result = SearchResult {
         best_move: None,
         score: 0,

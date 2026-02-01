@@ -100,24 +100,11 @@ pub fn pvs_search(
         .piece_bb(crate::bitboard::Piece::King, color)
         .lsb()
         .unwrap_or(crate::bitboard::Square::E1);
-    let enemy_attacks = crate::bitboard::Bitboard::EMPTY; // TODO: Compute real enemy attacks for legality
+    let enemy_attacks = crate::bitboard::Bitboard::EMPTY;
     let legal_moves = filter_legal_moves(
         &moves,
-        position.piece_bb(crate::bitboard::Piece::Pawn, color)
-            | position.piece_bb(crate::bitboard::Piece::Knight, color)
-            | position.piece_bb(crate::bitboard::Piece::Bishop, color)
-            | position.piece_bb(crate::bitboard::Piece::Rook, color)
-            | position.piece_bb(crate::bitboard::Piece::Queen, color)
-            | position.piece_bb(crate::bitboard::Piece::King, color),
-        position.piece_bb(crate::bitboard::Piece::Pawn, color.opposite())
-            | position.piece_bb(crate::bitboard::Piece::Knight, color.opposite())
-            | position.piece_bb(crate::bitboard::Piece::Bishop, color.opposite())
-            | position.piece_bb(crate::bitboard::Piece::Rook, color.opposite())
-            | position.piece_bb(crate::bitboard::Piece::Queen, color.opposite())
-            | position.piece_bb(crate::bitboard::Piece::King, color.opposite()),
-        occupied,
-        king_sq,
-        enemy_attacks,
+        position,
+        color,
     );
 
     if legal_moves.is_empty() {

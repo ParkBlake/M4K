@@ -7,36 +7,74 @@ use crate::bitboard::attacks::*;
 use crate::bitboard::{Bitboard, Color, Piece, Square, CastleRights};
 use super::generator::{Move, MoveList};
 
+/// Compute attacks by enemy pieces
+fn compute_enemy_attacks(position: &crate::bitboard::position::Position, enemy_color: Color) -> Bitboard {
+    use crate::bitboard::{attacks, Piece};
+    let occupied = (0..6).fold(Bitboard::EMPTY, |acc, p| {
+        acc | position.piece_bb(Piece::from_u8(p).unwrap(), crate::bitboard::Color::White)
+            | position.piece_bb(Piece::from_u8(p).unwrap(), crate::bitboard::Color::Black)
+    });
+
+    let mut enemy_attacks = Bitboard::EMPTY;
+
+    // Pawn attacks
+    let enemy_pawns = position.piece_bb(Piece::Pawn, enemy_color);
+    for sq in enemy_pawns.iter() {
+        enemy_attacks |= attacks::pawn_attacks(sq, enemy_color);
+    }
+
+    // Knight attacks
+    let enemy_knights = position.piece_bb(Piece::Knight, enemy_color);
+    for sq in enemy_knights.iter() {
+        enemy_attacks |= attacks::knight_attacks(sq);
+    }
+
+    // Bishop attacks
+    let enemy_bishops = position.piece_bb(Piece::Bishop, enemy_color);
+    for sq in enemy_bishops.iter() {
+        enemy_attacks |= attacks::bishop_attacks(sq, occupied);
+    }
+
+    // Rook attacks
+    let enemy_rooks = position.piece_bb(Piece::Rook, enemy_color);
+    for sq in enemy_rooks.iter() {
+        enemy_attacks |= attacks::rook_attacks(sq, occupied);
+    }
+
+    // Queen attacks
+    let enemy_queens = position.piece_bb(Piece::Queen, enemy_color);
+    for sq in enemy_queens.iter() {
+        enemy_attacks |= attacks::queen_attacks(sq, occupied);
+    }
+
+    // King attacks
+    let enemy_king = position.piece_bb(Piece::King, enemy_color);
+    for sq in enemy_king.iter() {
+        enemy_attacks |= attacks::king_attacks(sq);
+    }
+
+    enemy_attacks
+}
+
 /// Check if a move is legal in the current position
 ///
 /// This function assumes the move is pseudo-legal and checks if it leaves
 /// the king in check.
 pub fn is_legal_move(
     mv: Move,
-    // Position parameters would be passed here
-    our_pieces: Bitboard,
-    enemy_pieces: Bitboard,
-    occupied: Bitboard,
-    king_square: Square,
-    enemy_attacks: Bitboard, // Precomputed enemy attacks
+    position: &crate::bitboard::position::Position,
+    color: Color,
 ) -> bool {
     // For most moves, we just need to check if our king is attacked after the move
     // For castling, we need additional checks
 
     match mv.move_type() {
         super::generator::MoveType::Castling => {
-            is_legal_castling(mv, occupied, enemy_attacks, king_square)
+            is_legal_castling(mv, position, color)
         }
         _ => {
             // Simulate the move and check if king is safe
-            let king_safe = simulate_move_and_check_king(
-                mv,
-                our_pieces,
-                enemy_pieces,
-                occupied,
-                king_square,
-                enemy_attacks,
-            );
+            let king_safe = simulate_move_and_check_king(mv, position, color);
             king_safe
         }
     }
@@ -45,12 +83,13 @@ pub fn is_legal_move(
 /// Check if castling is legal
 fn is_legal_castling(
     mv: Move,
-    occupied: Bitboard,
-    enemy_attacks: Bitboard,
-    king_square: Square,
+    position: &crate::bitboard::position::Position,
+    color: Color,
 ) -> bool {
     let from = mv.from();
     let to = mv.to();
+    let king_square = position.piece_bb(Piece::King, color).lsb().unwrap();
+    let enemy_attacks = compute_enemy_attacks(position, color.opposite());
 
     // King must not be in check
     if enemy_attacks.is_occupied(king_square) {
@@ -82,20 +121,26 @@ fn is_legal_castling(
 /// Simulate a move and check if the king is safe afterwards
 fn simulate_move_and_check_king(
     mv: Move,
-    our_pieces: Bitboard,
-    enemy_pieces: Bitboard,
-    occupied: Bitboard,
-    king_square: Square,
-    enemy_attacks: Bitboard,
+    position: &crate::bitboard::position::Position,
+    color: Color,
 ) -> bool {
-    // This is a simplified version. In a full implementation, we would:
-    // 1. Make the move on a temporary board
-    // 2. Recalculate enemy attacks
-    // 3. Check if our king is attacked
+    // Clone the position, make the move, then check if king is attacked
+    let mut new_position = position.clone();
+    let undo = new_position.make_move(mv);
 
-    // For now, just return true (placeholder)
-    // In a real engine, this would be much more complex
-    true
+    // Compute enemy attacks in the new position
+    let enemy_attacks = compute_enemy_attacks(&new_position, color.opposite());
+
+    // Get our king square in the new position
+    let king_square = new_position.piece_bb(Piece::King, color).lsb().unwrap();
+
+    // Check if king is attacked
+    let king_safe = !enemy_attacks.is_occupied(king_square);
+
+    // Unmake the move
+    new_position.unmake_move(undo);
+
+    king_safe
 }
 
 /// Check if the current position is in check
@@ -127,24 +172,13 @@ pub fn is_stalemate(
 /// Filter a list of pseudo-legal moves to only include legal ones
 pub fn filter_legal_moves(
     pseudo_legal: &MoveList,
-    // Position parameters
-    our_pieces: Bitboard,
-    enemy_pieces: Bitboard,
-    occupied: Bitboard,
-    king_square: Square,
-    enemy_attacks: Bitboard,
+    position: &crate::bitboard::position::Position,
+    color: Color,
 ) -> MoveList {
     let mut legal = MoveList::new();
 
     for &mv in pseudo_legal.iter() {
-        if is_legal_move(
-            mv,
-            our_pieces,
-            enemy_pieces,
-            occupied,
-            king_square,
-            enemy_attacks,
-        ) {
+        if is_legal_move(mv, position, color) {
             legal.push(mv);
         }
     }

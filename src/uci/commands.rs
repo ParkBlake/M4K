@@ -32,6 +32,7 @@ pub enum UciCommand {
 }
 
 /// Time control for search
+#[derive(Clone, Copy)]
 pub struct TimeControl {
     pub wtime: Option<u64>,
     pub btime: Option<u64>,
@@ -44,31 +45,193 @@ pub struct TimeControl {
     pub infinite: bool,
 }
 
-/// Parse position command
-fn parse_position_command(args: &[&str]) -> Option<UciCommand> {
-    // Placeholder - would parse FEN and moves
-    Some(UciCommand::Position {
-        fen: "startpos".to_string(),
-        moves: Vec::new(),
-    })
-}
-
-/// Parse go command
-fn parse_go_command(args: &[&str]) -> Option<UciCommand> {
-    // Placeholder - would parse time controls
-    Some(UciCommand::Go {
-        time_control: TimeControl {
+impl Default for TimeControl {
+    fn default() -> Self {
+        TimeControl {
             wtime: None,
             btime: None,
             winc: None,
             binc: None,
             movestogo: None,
-            depth: None,
+            depth: Some(4), // Default depth
             nodes: None,
             movetime: None,
             infinite: false,
-        },
-    })
+        }
+    }
+}
+
+/// Parse position command
+fn parse_position_command(args: &[&str]) -> Option<UciCommand> {
+    if args.is_empty() {
+        return None;
+    }
+
+    let mut fen = String::new();
+    let mut moves = Vec::new();
+    let mut parsing_moves = false;
+
+    if args[0] == "startpos" {
+        fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".to_string();
+        parsing_moves = true;
+    } else if args[0] == "fen" {
+        // Collect FEN string until "moves" or end
+        let mut fen_parts = Vec::new();
+        for &arg in &args[1..] {
+            if arg == "moves" {
+                parsing_moves = true;
+                break;
+            }
+            fen_parts.push(arg);
+        }
+        fen = fen_parts.join(" ");
+    } else {
+        return None;
+    }
+
+    // Parse moves if present
+    if parsing_moves {
+        if let Some(moves_idx) = args.iter().position(|&x| x == "moves") {
+            for &mv_str in &args[moves_idx + 1..] {
+                if let Some(mv) = parse_uci_move(mv_str) {
+                    moves.push(mv);
+                }
+            }
+        }
+    }
+
+    Some(UciCommand::Position { fen, moves })
+}
+
+/// Parse a UCI move string into a Move
+fn parse_uci_move(mv_str: &str) -> Option<Move> {
+    use crate::bitboard::{Piece, Square};
+
+    if mv_str.len() < 4 {
+        return None;
+    }
+
+    let bytes = mv_str.as_bytes();
+    let from_file = (bytes[0] as char as u32).checked_sub('a' as u32)?;
+    let from_rank = (bytes[1] as char as u32).checked_sub('1' as u32)?;
+    let to_file = (bytes[2] as char as u32).checked_sub('a' as u32)?;
+    let to_rank = (bytes[3] as char as u32).checked_sub('1' as u32)?;
+
+    if from_file > 7 || from_rank > 7 || to_file > 7 || to_rank > 7 {
+        return None;
+    }
+
+    let from = Square::new(from_file as u8, from_rank as u8);
+    let to = Square::new(to_file as u8, to_rank as u8);
+
+    // Check for promotion
+    if mv_str.len() == 5 {
+        let promo_char = bytes[4] as char;
+        let promo_piece = match promo_char.to_ascii_lowercase() {
+            'q' => Piece::Queen,
+            'r' => Piece::Rook,
+            'b' => Piece::Bishop,
+            'n' => Piece::Knight,
+            _ => return None,
+        };
+        Some(Move::promotion(from, to, promo_piece))
+    } else {
+        Some(Move::new(from, to))
+    }
+}
+
+/// Parse go command
+fn parse_go_command(args: &[&str]) -> Option<UciCommand> {
+    let mut time_control = TimeControl {
+        wtime: None,
+        btime: None,
+        winc: None,
+        binc: None,
+        movestogo: None,
+        depth: None,
+        nodes: None,
+        movetime: None,
+        infinite: false,
+    };
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i] {
+            "infinite" => {
+                time_control.infinite = true;
+                i += 1;
+            }
+            "wtime" => {
+                if i + 1 < args.len() {
+                    time_control.wtime = args[i + 1].parse().ok();
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "btime" => {
+                if i + 1 < args.len() {
+                    time_control.btime = args[i + 1].parse().ok();
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "winc" => {
+                if i + 1 < args.len() {
+                    time_control.winc = args[i + 1].parse().ok();
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "binc" => {
+                if i + 1 < args.len() {
+                    time_control.binc = args[i + 1].parse().ok();
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "movestogo" => {
+                if i + 1 < args.len() {
+                    time_control.movestogo = args[i + 1].parse().ok();
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "depth" => {
+                if i + 1 < args.len() {
+                    time_control.depth = args[i + 1].parse().ok();
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "nodes" => {
+                if i + 1 < args.len() {
+                    time_control.nodes = args[i + 1].parse().ok();
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "movetime" => {
+                if i + 1 < args.len() {
+                    time_control.movetime = args[i + 1].parse().ok();
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            _ => {
+                i += 1;
+            }
+        }
+    }
+
+    Some(UciCommand::Go { time_control })
 }
 
 #[cfg(test)]

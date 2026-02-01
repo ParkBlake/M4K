@@ -117,21 +117,8 @@ pub fn negamax(
 
     let legal_moves = filter_legal_moves(
         &moves,
-        position.piece_bb(Piece::Pawn, color)
-            | position.piece_bb(Piece::Knight, color)
-            | position.piece_bb(Piece::Bishop, color)
-            | position.piece_bb(Piece::Rook, color)
-            | position.piece_bb(Piece::Queen, color)
-            | position.piece_bb(Piece::King, color),
-        position.piece_bb(Piece::Pawn, color.opposite())
-            | position.piece_bb(Piece::Knight, color.opposite())
-            | position.piece_bb(Piece::Bishop, color.opposite())
-            | position.piece_bb(Piece::Rook, color.opposite())
-            | position.piece_bb(Piece::Queen, color.opposite())
-            | position.piece_bb(Piece::King, color.opposite()),
-        occupied,
-        king_sq,
-        enemy_attacks,
+        position,
+        color,
     );
 
     for &mv in legal_moves.iter() {
