@@ -40,6 +40,220 @@ impl Position {
         }
     }
 
+    /// Apply a move to the position, returning an Undo struct for unmaking.
+    pub fn make_move(&mut self, mv: crate::movegen::Move) -> Undo {
+        use crate::bitboard::{Piece, Color};
+        let from = mv.from();
+        let to = mv.to();
+        let color = self.side_to_move;
+        let mut captured = None;
+        let mut prev_castling = self.castling_rights;
+        let mut prev_en_passant = self.en_passant;
+        let mut prev_halfmove = self.halfmove_clock;
+
+        // Find the moving piece
+        let mut moving_piece = None;
+        for piece in 0..6 {
+            if self.pieces[piece][color as usize].is_occupied(from) {
+                moving_piece = Some(Piece::from_u8(piece as u8).unwrap());
+                break;
+            }
+        }
+        let moving_piece = moving_piece.expect("No moving piece found on from square");
+
+        // Handle captures
+        for piece in 0..6 {
+            let opp = color.opposite() as usize;
+            if self.pieces[piece][opp].is_occupied(to) {
+                self.pieces[piece][opp].clear(to);
+                captured = Some(Piece::from_u8(piece as u8).unwrap());
+                break;
+            }
+        }
+
+        // Remove moving piece from source
+        self.pieces[moving_piece as usize][color as usize].clear(from);
+
+        // Handle move types
+        match mv.move_type() {
+            crate::movegen::MoveType::Normal => {
+                self.pieces[moving_piece as usize][color as usize].set(to);
+            }
+            crate::movegen::MoveType::Promotion => {
+                // Remove pawn, add promoted piece
+                let promo = mv.promotion_piece();
+                self.pieces[Piece::Pawn as usize][color as usize].clear(from);
+                self.pieces[promo as usize][color as usize].set(to);
+            }
+            crate::movegen::MoveType::EnPassant => {
+                self.pieces[moving_piece as usize][color as usize].set(to);
+                // Remove captured pawn
+                let ep_rank = if color == Color::White { to.rank() - 1 } else { to.rank() + 1 };
+                let ep_sq = Square::new(to.file(), ep_rank);
+                self.pieces[Piece::Pawn as usize][color.opposite() as usize].clear(ep_sq);
+                captured = Some(Piece::Pawn);
+            }
+            crate::movegen::MoveType::Castling => {
+                self.pieces[moving_piece as usize][color as usize].set(to);
+                // Move rook as well
+                match (from, to) {
+                    (Square::E1, Square::G1) => { // White kingside
+                        self.pieces[Piece::Rook as usize][Color::White as usize].clear(Square::H1);
+                        self.pieces[Piece::Rook as usize][Color::White as usize].set(Square::F1);
+                    }
+                    (Square::E1, Square::C1) => { // White queenside
+                        self.pieces[Piece::Rook as usize][Color::White as usize].clear(Square::A1);
+                        self.pieces[Piece::Rook as usize][Color::White as usize].set(Square::D1);
+                    }
+                    (Square::E8, Square::G8) => { // Black kingside
+                        self.pieces[Piece::Rook as usize][Color::Black as usize].clear(Square::H8);
+                        self.pieces[Piece::Rook as usize][Color::Black as usize].set(Square::F8);
+                    }
+                    (Square::E8, Square::C8) => { // Black queenside
+                        self.pieces[Piece::Rook as usize][Color::Black as usize].clear(Square::A8);
+                        self.pieces[Piece::Rook as usize][Color::Black as usize].set(Square::D8);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // Update castling rights
+        match from {
+            Square::E1 => {
+                self.castling_rights.remove(CastleRights::WHITE_KING);
+                self.castling_rights.remove(CastleRights::WHITE_QUEEN);
+            }
+            Square::E8 => {
+                self.castling_rights.remove(CastleRights::BLACK_KING);
+                self.castling_rights.remove(CastleRights::BLACK_QUEEN);
+            }
+            Square::A1 => self.castling_rights.remove(CastleRights::WHITE_QUEEN),
+            Square::H1 => self.castling_rights.remove(CastleRights::WHITE_KING),
+            Square::A8 => self.castling_rights.remove(CastleRights::BLACK_QUEEN),
+            Square::H8 => self.castling_rights.remove(CastleRights::BLACK_KING),
+            _ => {}
+        }
+        match to {
+            Square::A1 => self.castling_rights.remove(CastleRights::WHITE_QUEEN),
+            Square::H1 => self.castling_rights.remove(CastleRights::WHITE_KING),
+            Square::A8 => self.castling_rights.remove(CastleRights::BLACK_QUEEN),
+            Square::H8 => self.castling_rights.remove(CastleRights::BLACK_KING),
+            _ => {}
+        }
+
+        // Update en passant
+        self.en_passant = None;
+        if moving_piece == Piece::Pawn && (from.rank() as i8 - to.rank() as i8).abs() == 2 {
+            let ep_rank = (from.rank() + to.rank()) / 2;
+            self.en_passant = Some(Square::new(from.file(), ep_rank));
+        }
+
+        // Update halfmove clock
+        if moving_piece == Piece::Pawn || captured.is_some() {
+            self.halfmove_clock = 0;
+        } else {
+            self.halfmove_clock += 1;
+        }
+
+        // Update fullmove number
+        if color == Color::Black {
+            self.fullmove_number += 1;
+        }
+
+        // Switch side to move
+        self.side_to_move = color.opposite();
+
+        Undo {
+            mv,
+            captured,
+            prev_castling,
+            prev_en_passant,
+            prev_halfmove,
+        }
+    }
+
+    /// Undo a move using the Undo struct.
+    pub fn unmake_move(&mut self, undo: Undo) {
+        use crate::bitboard::{Piece, Color};
+        let from = undo.mv.from();
+        let to = undo.mv.to();
+        let color = self.side_to_move.opposite();
+
+        // Switch side to move back
+        self.side_to_move = color;
+
+        // Restore fullmove number
+        if color == Color::Black {
+            self.fullmove_number -= 1;
+        }
+
+        // Restore halfmove clock, castling, en passant
+        self.halfmove_clock = undo.prev_halfmove;
+        self.castling_rights = undo.prev_castling;
+        self.en_passant = undo.prev_en_passant;
+
+        // Remove piece from destination
+        let mut moving_piece = None;
+        for piece in 0..6 {
+            if self.pieces[piece][color as usize].is_occupied(to) {
+                moving_piece = Some(Piece::from_u8(piece as u8).unwrap());
+                break;
+            }
+        }
+        let moving_piece = moving_piece.expect("No moving piece found on to square");
+
+        // Remove from destination
+        self.pieces[moving_piece as usize][color as usize].clear(to);
+
+        // Restore captured piece if any
+        if let Some(captured) = undo.captured {
+            self.pieces[captured as usize][color.opposite() as usize].set(to);
+        }
+
+        // Restore moving piece to source
+        match undo.mv.move_type() {
+            crate::movegen::MoveType::Normal => {
+                self.pieces[moving_piece as usize][color as usize].set(from);
+            }
+            crate::movegen::MoveType::Promotion => {
+                // Remove promoted piece, restore pawn
+                self.pieces[moving_piece as usize][color as usize].clear(to);
+                self.pieces[Piece::Pawn as usize][color as usize].set(from);
+            }
+            crate::movegen::MoveType::EnPassant => {
+                self.pieces[moving_piece as usize][color as usize].set(from);
+                // Restore captured pawn
+                let ep_rank = if color == Color::White { to.rank() - 1 } else { to.rank() + 1 };
+                let ep_sq = Square::new(to.file(), ep_rank);
+                self.pieces[Piece::Pawn as usize][color.opposite() as usize].set(ep_sq);
+            }
+            crate::movegen::MoveType::Castling => {
+                self.pieces[moving_piece as usize][color as usize].set(from);
+                // Move rook back
+                match (from, to) {
+                    (Square::E1, Square::G1) => { // White kingside
+                        self.pieces[Piece::Rook as usize][Color::White as usize].clear(Square::F1);
+                        self.pieces[Piece::Rook as usize][Color::White as usize].set(Square::H1);
+                    }
+                    (Square::E1, Square::C1) => { // White queenside
+                        self.pieces[Piece::Rook as usize][Color::White as usize].clear(Square::D1);
+                        self.pieces[Piece::Rook as usize][Color::White as usize].set(Square::A1);
+                    }
+                    (Square::E8, Square::G8) => { // Black kingside
+                        self.pieces[Piece::Rook as usize][Color::Black as usize].clear(Square::F8);
+                        self.pieces[Piece::Rook as usize][Color::Black as usize].set(Square::H8);
+                    }
+                    (Square::E8, Square::C8) => { // Black queenside
+                        self.pieces[Piece::Rook as usize][Color::Black as usize].clear(Square::D8);
+                        self.pieces[Piece::Rook as usize][Color::Black as usize].set(Square::A8);
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
     /// Parse a FEN string and set the position accordingly.
     pub fn set_fen(&mut self, fen: &str) -> Result<(), String> {
         let parts: Vec<&str> = fen.trim().split_whitespace().collect();
@@ -252,39 +466,50 @@ impl Position {
         fen
     }
 
-    /// Compute the Zobrist hash for the current position.
-    pub fn zobrist_hash(&self) -> ZobristHash {
-        use crate::utils::zobrist::{
-            ZOBRIST_BLACK_TO_MOVE, ZOBRIST_CASTLE, ZOBRIST_EN_PASSANT, ZOBRIST_PIECE_SQUARE,
-        };
+   /// Compute the Zobrist hash for the current position.
+   pub fn zobrist_hash(&self) -> ZobristHash {
+       use crate::utils::zobrist::{
+           ZOBRIST_BLACK_TO_MOVE, ZOBRIST_CASTLE, ZOBRIST_EN_PASSANT, ZOBRIST_PIECE_SQUARE,
+       };
 
-        let mut hash = 0u64;
+       let mut hash = 0u64;
 
-        // Pieces
-        for piece in 0..6 {
-            for color in 0..2 {
-                let mut bb = self.pieces[piece][color];
-                while let Some(sq) = bb.pop_lsb() {
-                    hash ^= ZOBRIST_PIECE_SQUARE[piece][color][sq.0 as usize];
-                }
-            }
-        }
+       // Pieces
+       for piece in 0..6 {
+           for color in 0..2 {
+               let mut bb = self.pieces[piece][color];
+               while let Some(sq) = bb.pop_lsb() {
+                   hash ^= ZOBRIST_PIECE_SQUARE[piece][color][sq.0 as usize];
+               }
+           }
+       }
 
-        // Side to move
-        if self.side_to_move == Color::Black {
-            hash ^= *ZOBRIST_BLACK_TO_MOVE;
-        }
+       // Side to move
+       if self.side_to_move == Color::Black {
+           hash ^= *ZOBRIST_BLACK_TO_MOVE;
+       }
 
-        // Castling rights
-        hash ^= ZOBRIST_CASTLE[self.castling_rights.0 as usize];
+       // Castling rights
+       hash ^= ZOBRIST_CASTLE[self.castling_rights.0 as usize];
 
-        // En passant
-        if let Some(ep_sq) = self.en_passant {
-            hash ^= ZOBRIST_EN_PASSANT[ep_sq.file() as usize];
-        }
+       // En passant
+       if let Some(ep_sq) = self.en_passant {
+           hash ^= ZOBRIST_EN_PASSANT[ep_sq.file() as usize];
+       }
 
-        ZobristHash(hash)
-    }
+       ZobristHash(hash)
+   }
+}
+
+/// Undo information for unmaking a move.
+#[derive(Clone, Debug)]
+pub struct Undo {
+   pub mv: crate::movegen::Move,
+   pub captured: Option<crate::bitboard::Piece>,
+   pub prev_castling: CastleRights,
+   pub prev_en_passant: Option<Square>,
+   pub prev_halfmove: u32,
+}
 
     /// Place a piece on the board.
     pub fn set_piece(&mut self, piece: Piece, color: Color, sq: Square) {
