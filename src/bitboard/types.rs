@@ -71,6 +71,12 @@ impl Bitboard {
         popcnt(self.0)
     }
 
+    /// Check if the bitboard is empty
+    #[inline(always)]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
     /// Get the least significant bit
     #[inline(always)]
     pub fn lsb(self) -> Option<Square> {
@@ -295,6 +301,20 @@ pub enum Piece {
     King = 5,
 }
 
+impl Piece {
+    pub fn from_u8(val: u8) -> Option<Piece> {
+        match val {
+            0 => Some(Piece::Pawn),
+            1 => Some(Piece::Knight),
+            2 => Some(Piece::Bishop),
+            3 => Some(Piece::Rook),
+            4 => Some(Piece::Queen),
+            5 => Some(Piece::King),
+            _ => None,
+        }
+    }
+}
+
 /// Color
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 #[repr(u8)]
@@ -310,6 +330,14 @@ impl Color {
         match self {
             Color::White => Color::Black,
             Color::Black => Color::White,
+        }
+    }
+
+    pub fn from_u8(val: u8) -> Color {
+        match val {
+            0 => Color::White,
+            1 => Color::Black,
+            _ => Color::White,
         }
     }
 }

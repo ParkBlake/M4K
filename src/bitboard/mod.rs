@@ -5,7 +5,6 @@
 pub mod attacks;
 pub mod magic;
 pub mod position;
-pub mod position;
 pub mod types;
 
 pub use self::prelude::*;

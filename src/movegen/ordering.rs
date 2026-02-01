@@ -4,7 +4,7 @@
 //! of the alpha-beta search by trying the most promising moves first.
 
 use super::generator::{Move, MoveList, MoveType};
-use crate::bitboard::{Piece, Square};
+use crate::bitboard::{Bitboard, Piece, Square};
 
 /// Move ordering scores for different move types
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]

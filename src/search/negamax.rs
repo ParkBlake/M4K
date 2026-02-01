@@ -17,7 +17,7 @@ pub fn negamax(
     depth: i32,
     color: Color,
     evaluator: &Evaluator,
-    // Position parameters would be passed here
+    position: &crate::bitboard::Position,
 ) -> NegamaxResult {
     // Base case: evaluate position
     if depth == 0 {

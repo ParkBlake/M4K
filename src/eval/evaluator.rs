@@ -73,7 +73,7 @@ impl Evaluator {
         );
 
         // Mobility
-        let mobility = evaluate_mobility(position);
+        let mobility = Self::evaluate_mobility(position);
 
         // Weighted sum (best-practice weights, can be tuned)
         // Material: 1.0, PST: 0.2, Pawn structure: 0.15, King safety: 0.15, Mobility: 0.1

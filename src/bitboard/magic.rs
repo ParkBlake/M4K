@@ -20,10 +20,20 @@ struct MagicEntry {
 }
 
 /// Precomputed magic entries for bishops
-static BISHOP_MAGICS: [MagicEntry; 64] = generate_bishop_magics();
+static mut BISHOP_MAGICS: [MagicEntry; 64] = [MagicEntry {
+    magic: 0,
+    mask: Bitboard::EMPTY,
+    shift: 0,
+    offset: 0,
+}; 64];
 
 /// Precomputed magic entries for rooks
-static ROOK_MAGICS: [MagicEntry; 64] = generate_rook_magics();
+static mut ROOK_MAGICS: [MagicEntry; 64] = [MagicEntry {
+    magic: 0,
+    mask: Bitboard::EMPTY,
+    shift: 0,
+    offset: 0,
+}; 64];
 
 /// Attack tables for bishops and rooks
 /// Size is large enough to hold all possible attacks
@@ -37,68 +47,6 @@ pub fn init_magics() {
         init_bishop_attacks();
         init_rook_attacks();
     }
-}
-
-/// Generate bishop magic entries
-const fn generate_bishop_magics() -> [MagicEntry; 64] {
-    // Placeholder magic numbers - in a real implementation, these would be
-    // carefully chosen to minimize collisions and table size
-    let mut magics = [MagicEntry {
-        magic: 0,
-        mask: Bitboard::EMPTY,
-        shift: 0,
-        offset: 0,
-    }; 64];
-
-    let mut sq = 0;
-    while sq < 64 {
-        // Generate bishop-relevant occupancy mask
-        let mask = bishop_relevant_mask(Square(sq as u8));
-
-        // Placeholder magic number (would be precomputed)
-        let magic = 0x100020410080400; // Example magic
-
-        magics[sq] = MagicEntry {
-            magic,
-            mask,
-            shift: mask.count() as u32,
-            offset: 0, // Will be set during initialization
-        };
-
-        sq += 1;
-    }
-
-    magics
-}
-
-/// Generate rook magic entries
-const fn generate_rook_magics() -> [MagicEntry; 64] {
-    let mut magics = [MagicEntry {
-        magic: 0,
-        mask: Bitboard::EMPTY,
-        shift: 0,
-        offset: 0,
-    }; 64];
-
-    let mut sq = 0;
-    while sq < 64 {
-        // Generate rook-relevant occupancy mask
-        let mask = rook_relevant_mask(Square(sq as u8));
-
-        // Placeholder magic number
-        let magic = 0x8000100040002000; // Example magic
-
-        magics[sq] = MagicEntry {
-            magic,
-            mask,
-            shift: mask.count() as u32,
-            offset: 0,
-        };
-
-        sq += 1;
-    }
-
-    magics
 }
 
 /// Get bishop-relevant occupancy mask for a square
@@ -196,8 +144,19 @@ unsafe fn init_bishop_attacks() {
     let mut offset = 0;
 
     for sq in 0..64 {
-        let entry = &BISHOP_MAGICS[sq];
         let square = Square(sq as u8);
+        let mask = bishop_relevant_mask(square);
+        let magic = 0x100020410080400; // Placeholder
+        let shift = mask.count() as u32;
+
+        BISHOP_MAGICS[sq] = MagicEntry {
+            magic,
+            mask,
+            shift,
+            offset: 0,
+        };
+
+        let entry = &BISHOP_MAGICS[sq];
 
         // Update offset
         let mut magic_entry = BISHOP_MAGICS[sq];
@@ -223,8 +182,19 @@ unsafe fn init_rook_attacks() {
     let mut offset = 0;
 
     for sq in 0..64 {
-        let entry = &ROOK_MAGICS[sq];
         let square = Square(sq as u8);
+        let mask = rook_relevant_mask(square);
+        let magic = 0x8000100040002000; // Placeholder
+        let shift = mask.count() as u32;
+
+        ROOK_MAGICS[sq] = MagicEntry {
+            magic,
+            mask,
+            shift,
+            offset: 0,
+        };
+
+        let entry = &ROOK_MAGICS[sq];
 
         let mut magic_entry = ROOK_MAGICS[sq];
         magic_entry.offset = offset;
@@ -303,27 +273,27 @@ fn generate_rook_attacks_slow(square: Square, occupied: Bitboard) -> Bitboard {
 
 /// Get bishop attacks using magic bitboards
 #[inline(always)]
-pub fn bishop_attacks_magic(square: Square, occupied: Bitboard) -> Bitboard {
+pub unsafe fn bishop_attacks_magic(square: Square, occupied: Bitboard) -> Bitboard {
     let entry = &BISHOP_MAGICS[square.0 as usize];
     let relevant_occupied = occupied.0 & entry.mask.0;
     let index =
         (relevant_occupied.wrapping_mul(entry.magic) >> (64 - entry.shift)) as usize + entry.offset;
-    unsafe { BISHOP_ATTACKS[index] }
+    BISHOP_ATTACKS[index]
 }
 
 /// Get rook attacks using magic bitboards
 #[inline(always)]
-pub fn rook_attacks_magic(square: Square, occupied: Bitboard) -> Bitboard {
+pub unsafe fn rook_attacks_magic(square: Square, occupied: Bitboard) -> Bitboard {
     let entry = &ROOK_MAGICS[square.0 as usize];
     let relevant_occupied = occupied.0 & entry.mask.0;
     let index =
         (relevant_occupied.wrapping_mul(entry.magic) >> (64 - entry.shift)) as usize + entry.offset;
-    unsafe { ROOK_ATTACKS[index] }
+    ROOK_ATTACKS[index]
 }
 
 /// Get queen attacks using magic bitboards
 #[inline(always)]
-pub fn queen_attacks_magic(square: Square, occupied: Bitboard) -> Bitboard {
+pub unsafe fn queen_attacks_magic(square: Square, occupied: Bitboard) -> Bitboard {
     bishop_attacks_magic(square, occupied) | rook_attacks_magic(square, occupied)
 }
 

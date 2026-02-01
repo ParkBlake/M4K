@@ -10,7 +10,7 @@ use once_cell::sync::Lazy;
 ///
 /// We use a large array of random numbers to ensure minimal collisions.
 /// The structure is: [piece][color][square]
-static ZOBRIST_PIECE_SQUARE: Lazy<[[[u64; 64]; 2]; 6]> = Lazy::new(|| {
+pub static ZOBRIST_PIECE_SQUARE: Lazy<[[[u64; 64]; 2]; 6]> = Lazy::new(|| {
     use rand::Rng;
     let mut rng = rand::thread_rng();
     let mut table = [[[0u64; 64]; 2]; 6];
@@ -26,10 +26,10 @@ static ZOBRIST_PIECE_SQUARE: Lazy<[[[u64; 64]; 2]; 6]> = Lazy::new(|| {
 });
 
 /// Random number for black to move
-static ZOBRIST_BLACK_TO_MOVE: Lazy<u64> = Lazy::new(|| rand::random());
+pub static ZOBRIST_BLACK_TO_MOVE: Lazy<u64> = Lazy::new(|| rand::random());
 
 /// Random numbers for castling rights
-static ZOBRIST_CASTLE: Lazy<[u64; 16]> = Lazy::new(|| {
+pub static ZOBRIST_CASTLE: Lazy<[u64; 16]> = Lazy::new(|| {
     use rand::Rng;
     let mut rng = rand::thread_rng();
     let mut table = [0u64; 16];
@@ -40,7 +40,7 @@ static ZOBRIST_CASTLE: Lazy<[u64; 16]> = Lazy::new(|| {
 });
 
 /// Random numbers for en passant files
-static ZOBRIST_EN_PASSANT: Lazy<[u64; 8]> = Lazy::new(|| {
+pub static ZOBRIST_EN_PASSANT: Lazy<[u64; 8]> = Lazy::new(|| {
     use rand::Rng;
     let mut rng = rand::thread_rng();
     let mut table = [0u64; 8];

@@ -3,7 +3,7 @@
 //! This implements the UCI (Universal Chess Interface) protocol for communication
 //! with chess GUIs and other engines.
 
-use m4k::UciEngine;
+use pi5_chess::UciEngine;
 
 fn main() {
     // Initialize the UCI engine

@@ -2,7 +2,6 @@
 //!
 //! This engine uses ARM Neon SIMD instructions extensively for maximum performance.
 
-#![cfg_attr(target_arch = "aarch64", feature(stdarch_aarch64_neon_intrinsics))]
 #![allow(dead_code)]
 #![warn(missing_docs)]
 
@@ -18,7 +17,6 @@ pub mod utils;
 // Re-export commonly used types
 pub use bitboard::{Bitboard, CastleRights, Color, Piece, Square};
 pub use movegen::{Move, MoveList};
-pub use search::SearchEngine;
 pub use uci::UciEngine;
 
 /// Project-wide prelude for internal use

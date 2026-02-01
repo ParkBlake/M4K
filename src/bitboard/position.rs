@@ -281,7 +281,7 @@ impl Position {
         *self = Position::empty();
 
         // Piece placement
-        let mut rank = 7;
+        let mut rank: i32 = 7;
         let mut file = 0;
         for c in parts[0].chars() {
             match c {
@@ -313,7 +313,7 @@ impl Position {
                     if file > 7 || rank > 7 {
                         return Err("Invalid FEN: file or rank out of bounds".to_string());
                     }
-                    self.set_piece(piece, color, Square::new(file, rank));
+                    self.set_piece(piece, color, Square::new(file as u8, rank as u8));
                     file += 1;
                 }
                 _ => return Err(format!("Invalid FEN char: {}", c)),
@@ -515,6 +515,63 @@ impl Position {
 
         ZobristHash(hash)
     }
+
+    /// Place a piece on the board.
+    pub fn set_piece(&mut self, piece: Piece, color: Color, sq: Square) {
+        self.pieces[piece as usize][color as usize].set(sq);
+    }
+
+    /// Remove a piece from the board.
+    pub fn remove_piece(&mut self, piece: Piece, color: Color, sq: Square) {
+        self.pieces[piece as usize][color as usize].clear(sq);
+    }
+
+    /// Get the bitboard for a given piece and color.
+    pub fn piece_bb(&self, piece: Piece, color: Color) -> Bitboard {
+        self.pieces[piece as usize][color as usize]
+    }
+
+    /// Set up the standard chess starting position.
+    pub fn set_startpos(&mut self) {
+        use super::types::*;
+        use Color::*;
+        use Piece::*;
+
+        *self = Position::empty();
+
+        // Pawns
+        for file in 0..8 {
+            self.set_piece(Pawn, White, Square::new(file, 1));
+            self.set_piece(Pawn, Black, Square::new(file, 6));
+        }
+        // Knights
+        self.set_piece(Knight, White, Square::B1);
+        self.set_piece(Knight, White, Square::G1);
+        self.set_piece(Knight, Black, Square::B8);
+        self.set_piece(Knight, Black, Square::G8);
+        // Bishops
+        self.set_piece(Bishop, White, Square::C1);
+        self.set_piece(Bishop, White, Square::F1);
+        self.set_piece(Bishop, Black, Square::C8);
+        self.set_piece(Bishop, Black, Square::F8);
+        // Rooks
+        self.set_piece(Rook, White, Square::A1);
+        self.set_piece(Rook, White, Square::H1);
+        self.set_piece(Rook, Black, Square::A8);
+        self.set_piece(Rook, Black, Square::H8);
+        // Queens
+        self.set_piece(Queen, White, Square::D1);
+        self.set_piece(Queen, Black, Square::D8);
+        // Kings
+        self.set_piece(King, White, Square::E1);
+        self.set_piece(King, Black, Square::E8);
+
+        self.side_to_move = White;
+        self.castling_rights = CastleRights::ALL;
+        self.en_passant = None;
+        self.halfmove_clock = 0;
+        self.fullmove_number = 1;
+    }
 }
 
 /// Undo information for unmaking a move.
@@ -525,63 +582,6 @@ pub struct Undo {
     pub prev_castling: CastleRights,
     pub prev_en_passant: Option<Square>,
     pub prev_halfmove: u32,
-}
-
-/// Place a piece on the board.
-pub fn set_piece(&mut self, piece: Piece, color: Color, sq: Square) {
-    self.pieces[piece as usize][color as usize].set(sq);
-}
-
-/// Remove a piece from the board.
-pub fn remove_piece(&mut self, piece: Piece, color: Color, sq: Square) {
-    self.pieces[piece as usize][color as usize].clear(sq);
-}
-
-/// Get the bitboard for a given piece and color.
-pub fn piece_bb(&self, piece: Piece, color: Color) -> Bitboard {
-    self.pieces[piece as usize][color as usize]
-}
-
-/// Set up the standard chess starting position.
-pub fn set_startpos(&mut self) {
-    use Color::*;
-    use Piece::*;
-    use Square::*;
-
-    *self = Position::empty();
-
-    // Pawns
-    for file in 0..8 {
-        self.set_piece(Pawn, White, Square::new(file, 1));
-        self.set_piece(Pawn, Black, Square::new(file, 6));
-    }
-    // Knights
-    self.set_piece(Knight, White, B1);
-    self.set_piece(Knight, White, G1);
-    self.set_piece(Knight, Black, B8);
-    self.set_piece(Knight, Black, G8);
-    // Bishops
-    self.set_piece(Bishop, White, C1);
-    self.set_piece(Bishop, White, F1);
-    self.set_piece(Bishop, Black, C8);
-    self.set_piece(Bishop, Black, F8);
-    // Rooks
-    self.set_piece(Rook, White, A1);
-    self.set_piece(Rook, White, H1);
-    self.set_piece(Rook, Black, A8);
-    self.set_piece(Rook, Black, H8);
-    // Queens
-    self.set_piece(Queen, White, D1);
-    self.set_piece(Queen, Black, D8);
-    // Kings
-    self.set_piece(King, White, E1);
-    self.set_piece(King, Black, E8);
-
-    self.side_to_move = White;
-    self.castling_rights = CastleRights::ALL;
-    self.en_passant = None;
-    self.halfmove_clock = 0;
-    self.fullmove_number = 1;
 }
 
 impl fmt::Debug for Position {
@@ -666,26 +666,3 @@ mod tests {
 }
 
 // Helper trait implementations for Piece and Color
-impl Piece {
-    pub fn from_u8(val: u8) -> Option<Piece> {
-        match val {
-            0 => Some(Piece::Pawn),
-            1 => Some(Piece::Knight),
-            2 => Some(Piece::Bishop),
-            3 => Some(Piece::Rook),
-            4 => Some(Piece::Queen),
-            5 => Some(Piece::King),
-            _ => None,
-        }
-    }
-}
-
-impl Color {
-    pub fn from_u8(val: u8) -> Color {
-        match val {
-            0 => Color::White,
-            1 => Color::Black,
-            _ => Color::White,
-        }
-    }
-}

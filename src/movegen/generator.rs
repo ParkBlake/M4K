@@ -95,20 +95,17 @@ impl Move {
     }
 
     /// Check if this is a promotion move
-    #[inline(always)]
-    pub const fn is_promotion(self) -> bool {
+    pub fn is_promotion(self) -> bool {
         self.move_type() == MoveType::Promotion
     }
 
     /// Check if this is an en passant move
-    #[inline(always)]
-    pub const fn is_en_passant(self) -> bool {
+    pub fn is_en_passant(self) -> bool {
         self.move_type() == MoveType::EnPassant
     }
 
     /// Check if this is a castling move
-    #[inline(always)]
-    pub const fn is_castling(self) -> bool {
+    pub fn is_castling(self) -> bool {
         self.move_type() == MoveType::Castling
     }
 }
@@ -136,6 +133,12 @@ impl std::fmt::Debug for Move {
             MoveType::EnPassant => write!(f, "{:?}{:?} e.p.", self.from(), self.to()),
             MoveType::Castling => write!(f, "{:?}{:?} castling", self.from(), self.to()),
         }
+    }
+}
+
+impl std::fmt::Display for Move {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self, f)
     }
 }
 
