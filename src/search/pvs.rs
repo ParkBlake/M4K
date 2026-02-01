@@ -27,6 +27,8 @@ pub fn pvs_search(
     evaluator: &Evaluator,
     position: &Position,
 ) -> PvsResult {
+    use crate::movegen::legal::filter_legal_moves;
+
     // Base case: evaluate position
     if depth == 0 {
         return PvsResult {
@@ -39,7 +41,7 @@ pub fn pvs_search(
     let mut best_pv = Vec::new();
     let mut first_move = true;
 
-    // Generate moves (pseudo-legal for now)
+    // Generate pseudo-legal moves
     let mut moves = MoveList::new();
     let occupied = (0..6).fold(crate::bitboard::Bitboard::EMPTY, |acc, p| {
         acc | position.piece_bb(
@@ -93,7 +95,32 @@ pub fn pvs_search(
         generate_king_moves(&mut moves, king_sq, occupied, enemies);
     }
 
-    if moves.is_empty() {
+    // Filter legal moves
+    let king_sq = position
+        .piece_bb(crate::bitboard::Piece::King, color)
+        .lsb()
+        .unwrap_or(crate::bitboard::Square::E1);
+    let enemy_attacks = crate::bitboard::Bitboard::EMPTY; // TODO: Compute real enemy attacks for legality
+    let legal_moves = filter_legal_moves(
+        &moves,
+        position.piece_bb(crate::bitboard::Piece::Pawn, color)
+            | position.piece_bb(crate::bitboard::Piece::Knight, color)
+            | position.piece_bb(crate::bitboard::Piece::Bishop, color)
+            | position.piece_bb(crate::bitboard::Piece::Rook, color)
+            | position.piece_bb(crate::bitboard::Piece::Queen, color)
+            | position.piece_bb(crate::bitboard::Piece::King, color),
+        position.piece_bb(crate::bitboard::Piece::Pawn, color.opposite())
+            | position.piece_bb(crate::bitboard::Piece::Knight, color.opposite())
+            | position.piece_bb(crate::bitboard::Piece::Bishop, color.opposite())
+            | position.piece_bb(crate::bitboard::Piece::Rook, color.opposite())
+            | position.piece_bb(crate::bitboard::Piece::Queen, color.opposite())
+            | position.piece_bb(crate::bitboard::Piece::King, color.opposite()),
+        occupied,
+        king_sq,
+        enemy_attacks,
+    );
+
+    if legal_moves.is_empty() {
         // No moves: checkmate or stalemate
         return PvsResult {
             score: 0,
@@ -101,11 +128,9 @@ pub fn pvs_search(
         };
     }
 
-    for mv in moves.iter() {
-        // TODO: make_move/unmake_move for real legality and position update
-        // For now, just recurse with the same position (placeholder)
+    for &mv in legal_moves.iter() {
         let mut child_position = position.clone();
-        // Would apply mv to child_position here
+        let undo = child_position.make_move(mv);
 
         let score = if first_move {
             // Full window for first move
@@ -144,9 +169,11 @@ pub fn pvs_search(
             score
         };
 
+        child_position.unmake_move(undo);
+
         if score > best_score {
             best_score = score;
-            best_pv = vec![*mv];
+            best_pv = vec![mv];
         }
 
         if score > alpha {
