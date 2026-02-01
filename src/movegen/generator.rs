@@ -308,8 +308,9 @@ pub fn generate_bishop_moves(
     occupied: Bitboard,
     enemies: Bitboard,
 ) {
+    let friends = occupied & !enemies;  // occupied - enemies = friends
     for bishop_sq in bishops.iter() {
-        let attacks = bishop_attacks(bishop_sq, occupied);
+        let attacks = bishop_attacks(bishop_sq, occupied) & !friends;
 
         for target_sq in attacks.iter() {
             moves.push(Move::new(bishop_sq, target_sq));
@@ -324,8 +325,9 @@ pub fn generate_rook_moves(
     occupied: Bitboard,
     enemies: Bitboard,
 ) {
+    let friends = occupied & !enemies;  // occupied - enemies = friends
     for rook_sq in rooks.iter() {
-        let attacks = rook_attacks(rook_sq, occupied);
+        let attacks = rook_attacks(rook_sq, occupied) & !friends;
 
         for target_sq in attacks.iter() {
             moves.push(Move::new(rook_sq, target_sq));
@@ -340,8 +342,9 @@ pub fn generate_queen_moves(
     occupied: Bitboard,
     enemies: Bitboard,
 ) {
+    let friends = occupied & !enemies;  // occupied - enemies = friends
     for queen_sq in queens.iter() {
-        let attacks = queen_attacks(queen_sq, occupied);
+        let attacks = queen_attacks(queen_sq, occupied) & !friends;
 
         for target_sq in attacks.iter() {
             moves.push(Move::new(queen_sq, target_sq));

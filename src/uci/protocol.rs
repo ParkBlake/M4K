@@ -22,6 +22,9 @@ pub struct UciEngine {
 impl UciEngine {
     /// Create a new UCI engine
     pub fn new() -> Self {
+        // Initialize magic bitboards (must be done once at startup)
+        crate::bitboard::magic::init_magics();
+
         let mut position = Position::empty();
         position.set_startpos();
         UciEngine {

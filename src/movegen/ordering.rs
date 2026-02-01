@@ -123,7 +123,7 @@ impl SEE {
 
 /// Update history heuristic for a quiet move that caused a cutoff
 pub fn update_history(history_table: &mut [[i32; 64]; 64], mv: Move, depth: i32) {
-    if mv.move_type() == MoveType::Normal && !mv.is_capture(Bitboard::ALL) {
+    if mv.move_type() == MoveType::Normal {
         let from_idx = mv.from().0 as usize;
         let to_idx = mv.to().0 as usize;
         // Increase history score, with depth-based bonus

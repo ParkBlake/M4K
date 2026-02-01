@@ -330,14 +330,14 @@ mod tests {
     fn test_magic_initialization() {
         init_magics();
         // Test that tables are populated
-        let attacks = bishop_attacks_magic(Square::E4, Bitboard::EMPTY);
+        let attacks = unsafe { bishop_attacks_magic(Square::E4, Bitboard::EMPTY) };
         assert!(attacks.count() > 0);
     }
 
     #[test]
     fn test_bishop_magic_attacks() {
         init_magics();
-        let attacks = bishop_attacks_magic(Square::E4, Bitboard::EMPTY);
+        let attacks = unsafe { bishop_attacks_magic(Square::E4, Bitboard::EMPTY) };
         // Should attack all diagonals
         assert!(attacks.is_occupied(Square::D3));
         assert!(attacks.is_occupied(Square::F5));
@@ -346,7 +346,7 @@ mod tests {
     #[test]
     fn test_rook_magic_attacks() {
         init_magics();
-        let attacks = rook_attacks_magic(Square::E4, Bitboard::EMPTY);
+        let attacks = unsafe { rook_attacks_magic(Square::E4, Bitboard::EMPTY) };
         // Should attack entire rank and file
         assert!(attacks.is_occupied(Square::E1));
         assert!(attacks.is_occupied(Square::E8));

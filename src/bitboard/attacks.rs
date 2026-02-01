@@ -166,14 +166,28 @@ pub fn pawn_attacks(square: Square, color: Color) -> Bitboard {
     PAWN_ATTACKS[color as usize][square.0 as usize]
 }
 
-/// Generate bishop attacks using magic bitboards
+/// Generate bishop attacks using magic bitboards or NEON when available
 pub fn bishop_attacks(square: Square, occupied: Bitboard) -> Bitboard {
-    unsafe { crate::bitboard::magic::bishop_attacks_magic(square, occupied) }
+    #[cfg(target_arch = "aarch64")]
+    {
+        Bitboard(crate::asm::attacks_neon::bishop_attacks_neon(square.0 as u32, occupied.0))
+    }
+    #[cfg(not(target_arch = "aarch64"))]
+    {
+        unsafe { crate::bitboard::magic::bishop_attacks_magic(square, occupied) }
+    }
 }
 
-/// Generate rook attacks using magic bitboards
+/// Generate rook attacks using magic bitboards or NEON when available
 pub fn rook_attacks(square: Square, occupied: Bitboard) -> Bitboard {
-    unsafe { crate::bitboard::magic::rook_attacks_magic(square, occupied) }
+    #[cfg(target_arch = "aarch64")]
+    {
+        Bitboard(crate::asm::attacks_neon::rook_attacks_neon(square.0 as u32, occupied.0))
+    }
+    #[cfg(not(target_arch = "aarch64"))]
+    {
+        unsafe { crate::bitboard::magic::rook_attacks_magic(square, occupied) }
+    }
 }
 
 /// Generate queen attacks (combination of bishop and rook)
@@ -225,6 +239,7 @@ mod tests {
 
     #[test]
     fn test_bishop_attacks_empty_board() {
+        crate::bitboard::magic::init_magics();
         let attacks = bishop_attacks(Square::E4, Bitboard::EMPTY);
         // Bishop on e4 should attack all diagonals
         assert!(attacks.is_occupied(Square::D3));
@@ -235,6 +250,7 @@ mod tests {
 
     #[test]
     fn test_rook_attacks_empty_board() {
+        crate::bitboard::magic::init_magics();
         let attacks = rook_attacks(Square::E4, Bitboard::EMPTY);
         // Rook on e4 should attack entire rank and file
         assert!(attacks.is_occupied(Square::E1));

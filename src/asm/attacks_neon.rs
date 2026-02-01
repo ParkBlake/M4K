@@ -35,6 +35,11 @@ fn rank_attacks_inner(square: u32, occupied: u64) -> u64 {
     let rank_occupied = (occupied & rank_mask) >> (rank * 8);
     let file_bit = 1u64 << file;
 
+    // Special case for empty rank
+    if rank_occupied == 0 {
+        return rank_mask & !(1u64 << square);
+    }
+
     // Forward fill
     let mut forward = rank_occupied;
     forward ^= file_bit;
@@ -58,8 +63,14 @@ fn file_attacks_inner(square: u32, occupied: u64) -> u64 {
     let file = square % 8;
     let file_mask = 0x0101_0101_0101_0101u64 << file;
 
-    // Use similar hyperbola quintessence on the file
     let square_bb = 1u64 << square;
+
+    // Special case for empty file
+    if occupied & file_mask == 0 {
+        return file_mask & !square_bb;
+    }
+
+    // Use similar hyperbola quintessence on the file
     let forward = (occupied & file_mask) ^ square_bb;
     let reverse = forward.reverse_bits();
 
@@ -79,6 +90,12 @@ fn diagonal_attacks_inner(square: u32, occupied: u64) -> u64 {
     let mask = diagonal_mask(diag);
 
     let square_bb = 1u64 << square;
+
+    // Special case for empty diagonal
+    if occupied & mask == 0 {
+        return mask & !square_bb;
+    }
+
     let forward = (occupied & mask) ^ square_bb;
     let reverse = forward.reverse_bits();
 
@@ -96,6 +113,12 @@ fn anti_diagonal_attacks_inner(square: u32, occupied: u64) -> u64 {
     let mask = anti_diagonal_mask(anti_diag);
 
     let square_bb = 1u64 << square;
+
+    // Special case for empty anti-diagonal
+    if occupied & mask == 0 {
+        return mask & !square_bb;
+    }
+
     let forward = (occupied & mask) ^ square_bb;
     let reverse = forward.reverse_bits();
 

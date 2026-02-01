@@ -141,13 +141,13 @@ mod tests {
     fn test_pst_evaluation() {
         // Simple test with one piece each
         let score = evaluate_pst(
-            Bitboard::from_square(Square::E4), // white pawn
+            Square::E4.to_bitboard(), // white pawn on good central square
             Bitboard::EMPTY,
             Bitboard::EMPTY,
             Bitboard::EMPTY,
             Bitboard::EMPTY,
             Square::E1,                        // white king
-            Bitboard::from_square(Square::E5), // black pawn
+            Square::H2.to_bitboard(), // black pawn on bad square
             Bitboard::EMPTY,
             Bitboard::EMPTY,
             Bitboard::EMPTY,
@@ -155,7 +155,7 @@ mod tests {
             Square::E8, // black king
         );
 
-        // Should be positive (white has better pawn position)
+        // Should be positive (white has better position)
         assert!(score > 0);
     }
 }

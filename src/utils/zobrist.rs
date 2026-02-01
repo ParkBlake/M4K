@@ -198,8 +198,8 @@ mod tests {
         hash.update_en_passant(None, Some(Square::E3));
         assert_ne!(hash.value(), original);
 
-        // Setting the same EP square again should toggle it off
-        hash.update_en_passant(Some(Square::E3), Some(Square::E3));
+        // Setting EP to None should toggle it off
+        hash.update_en_passant(Some(Square::E3), None);
         assert_eq!(hash.value(), original);
     }
 }

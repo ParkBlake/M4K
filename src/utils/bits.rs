@@ -308,7 +308,7 @@ mod tests {
         let x = 0b1010u32;
         let y = 0b1100u32;
         let z = interleave_bits(x, y);
-        assert_eq!(z, 0b11001010u64);
+        assert_eq!(z, 0b11100100u64);
 
         let (dx, dy) = deinterleave_bits(z);
         assert_eq!(dx, x);
