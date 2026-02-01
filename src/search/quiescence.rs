@@ -6,6 +6,8 @@
 use crate::bitboard::Color;
 use crate::eval::Evaluator;
 use crate::movegen::Move;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Quiescence search to evaluate quiet positions
 ///
@@ -17,6 +19,7 @@ pub fn quiescence_search(
     color: Color,
     evaluator: &Evaluator,
     position: &crate::bitboard::position::Position,
+    stop_flag: &Arc<AtomicBool>,
 ) -> i32 {
     // Stand pat: evaluate the current position
     let stand_pat = evaluator.evaluate(position);
@@ -101,11 +104,15 @@ pub fn quiescence_search(
         .collect();
 
     for mv in captures {
+        if stop_flag.load(Ordering::Relaxed) {
+            break;
+        }
+
         let mut child_position = position.clone();
         let undo = child_position.make_move(mv);
 
         // Recursive quiescence search
-        let score = -quiescence_search(-beta, -alpha, color.opposite(), evaluator, &child_position);
+        let score = -quiescence_search(-beta, -alpha, color.opposite(), evaluator, &child_position, stop_flag);
 
         child_position.unmake_move(undo);
 
@@ -139,6 +146,7 @@ mod tests {
     #[test]
     fn test_quiescence_structure() {
         let evaluator = Evaluator::new();
+        let stop_flag = Arc::new(AtomicBool::new(false));
 
         // Basic test that quiescence search can be called
         let dummy_position = crate::bitboard::position::Position::empty();
@@ -148,6 +156,7 @@ mod tests {
             Color::White,
             &evaluator,
             &dummy_position,
+            &stop_flag,
         );
 
         // In a real test, we'd check the score bounds

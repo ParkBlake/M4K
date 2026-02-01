@@ -8,6 +8,8 @@ use crate::eval::Evaluator;
 use crate::movegen::{Move, MoveList};
 use crate::search::transposition::{TTEntry, TranspositionTable};
 use crate::uci::commands::TimeControl;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 /// Search result containing the best move and score
 #[derive(Clone, Copy)]
@@ -75,6 +77,7 @@ pub fn alpha_beta_search(
     tt: &mut TranspositionTable,
     evaluator: &Evaluator,
     position: &crate::bitboard::position::Position,
+    stop_flag: &Arc<AtomicBool>,
 ) -> SearchResult {
     let mut result = SearchResult {
         best_move: None,
@@ -113,7 +116,7 @@ pub fn alpha_beta_search(
 
     // Base case: depth 0, go to quiescence
     if depth == 0 {
-        result.score = quiescence_search(alpha, beta, color, evaluator, position);
+        result.score = quiescence_search(alpha, beta, color, evaluator, position, stop_flag);
         return result;
     }
 
@@ -186,6 +189,10 @@ pub fn alpha_beta_search(
     let mut node_type = crate::search::transposition::NodeType::Upper;
 
     for &mv in legal_moves.iter() {
+        if stop_flag.load(Ordering::Relaxed) {
+            break;
+        }
+
         let mut child_position = position.clone();
         let undo = child_position.make_move(mv);
 
@@ -198,6 +205,7 @@ pub fn alpha_beta_search(
             tt,
             evaluator,
             &child_position,
+            stop_flag,
         );
 
         let score = -child_result.score;
@@ -244,6 +252,7 @@ pub fn iterative_deepening(
     tt: &mut TranspositionTable,
     evaluator: &Evaluator,
     position: &crate::bitboard::position::Position,
+    stop_flag: &Arc<AtomicBool>,
 ) -> SearchResult {
     let max_depth = time_control.depth.unwrap_or(4) as i32;
     let mut result = SearchResult {
@@ -253,6 +262,10 @@ pub fn iterative_deepening(
     };
 
     for depth in 1..=max_depth {
+        if stop_flag.load(Ordering::Relaxed) {
+            break;
+        }
+
         let window_result = alpha_beta_search(
             depth,
             i32::MIN / 2,
@@ -261,6 +274,7 @@ pub fn iterative_deepening(
             tt,
             evaluator,
             position,
+            stop_flag,
         );
 
         result = window_result;
@@ -280,6 +294,7 @@ mod tests {
         // Basic test that the functions exist and can be called
         let mut tt = TranspositionTable::new();
         let evaluator = Evaluator::new();
+        let stop_flag = Arc::new(AtomicBool::new(false));
 
         let dummy_position = crate::bitboard::position::Position::empty();
         let result = alpha_beta_search(
@@ -290,6 +305,7 @@ mod tests {
             &mut tt,
             &evaluator,
             &dummy_position,
+            &stop_flag,
         );
 
         // In a real test, we'd have a position and check the result

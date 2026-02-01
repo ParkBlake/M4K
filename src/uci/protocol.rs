@@ -10,6 +10,10 @@ use crate::search::alphabeta::{iterative_deepening, SearchResult};
 use crate::search::transposition::TranspositionTable;
 use crate::uci::commands::{parse_command, TimeControl, UciCommand};
 use std::io::{self, BufRead, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
+use std::sync::Arc;
+use std::thread;
 
 /// UCI Engine state
 pub struct UciEngine {
@@ -17,6 +21,10 @@ pub struct UciEngine {
     evaluator: Evaluator,
     tt: TranspositionTable,
     time_control: TimeControl,
+    stop_flag: Arc<AtomicBool>,
+    search_handle: Option<thread::JoinHandle<()>>,
+    result_sender: mpsc::Sender<SearchResult>,
+    result_receiver: mpsc::Receiver<SearchResult>,
 }
 
 impl UciEngine {
@@ -27,11 +35,18 @@ impl UciEngine {
 
         let mut position = Position::empty();
         position.set_startpos();
+
+        let (tx, rx) = mpsc::channel();
+
         UciEngine {
             position,
             evaluator: Evaluator::new(),
             tt: TranspositionTable::new(),
             time_control: TimeControl::default(),
+            stop_flag: Arc::new(AtomicBool::new(false)),
+            search_handle: None,
+            result_sender: tx,
+            result_receiver: rx,
         }
     }
 
@@ -60,7 +75,19 @@ impl UciEngine {
                 stdout.flush().unwrap();
             }
 
+            // Check for search result
+            if let Ok(result) = self.result_receiver.try_recv() {
+                if let Some(mv) = result.best_move {
+                    writeln!(stdout, "bestmove {}", mv).unwrap();
+                    stdout.flush().unwrap();
+                }
+            }
+
             if command == "quit" {
+                if let Some(handle) = self.search_handle.take() {
+                    self.stop_flag.store(true, Ordering::Relaxed);
+                    let _ = handle.join();
+                }
                 break;
             }
         }
@@ -81,12 +108,12 @@ impl UciEngine {
             }
             Some(UciCommand::Go { time_control }) => {
                 self.time_control = time_control;
-                let result = self.search();
-                Some(format!("bestmove {}", result.best_move.unwrap()))
+                self.start_search();
+                None
             }
             Some(UciCommand::Stop) => {
-                // TODO: Implement search stopping
-                Some("info string stop not implemented".to_string())
+                self.stop_flag.store(true, Ordering::Relaxed);
+                None
             }
             Some(UciCommand::Quit) => None,
             None => Some(format!("info string Unknown command: {}", command.split_whitespace().next().unwrap_or(""))),
@@ -111,16 +138,20 @@ impl UciEngine {
         }
     }
 
-    /// Perform search
-    fn search(&mut self) -> SearchResult {
-        // Use iterative deepening with the current position
-        iterative_deepening(
-            &self.time_control,
-            self.position.side_to_move,
-            &mut self.tt,
-            &self.evaluator,
-            &self.position,
-        )
+    /// Start search in a separate thread
+    fn start_search(&mut self) {
+        self.stop_flag.store(false, Ordering::Relaxed);
+        let stop_flag_clone = Arc::clone(&self.stop_flag);
+        let position = self.position.clone();
+        let evaluator = Evaluator::new(); // Create new evaluator
+        let mut tt = TranspositionTable::new(); // Create new TT
+        let time_control = self.time_control.clone();
+        let sender = self.result_sender.clone();
+
+        self.search_handle = Some(thread::spawn(move || {
+            let result = iterative_deepening(&time_control, position.side_to_move, &mut tt, &evaluator, &position, &stop_flag_clone);
+            let _ = sender.send(result);
+        }));
     }
 }
 
