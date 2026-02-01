@@ -22,7 +22,7 @@ pub fn negamax(
     // Base case: evaluate position
     if depth == 0 {
         return NegamaxResult {
-            score: evaluator.evaluate() * if color == Color::White { 1 } else { -1 },
+            score: evaluator.evaluate(position) * if color == Color::White { 1 } else { -1 },
         };
     }
 
@@ -36,7 +36,7 @@ pub fn negamax(
         // make_move(position, mv);
 
         // Recursive search with negated color
-        let result = negamax(depth - 1, color.opposite(), evaluator);
+        let result = negamax(depth - 1, color.opposite(), evaluator, position);
         let score = -result.score;
 
         // Unmake move (placeholder)
@@ -57,7 +57,8 @@ mod tests {
     #[test]
     fn test_negamax_structure() {
         let evaluator = Evaluator::new();
-        let result = negamax(1, Color::White, &evaluator);
+        let dummy_position = crate::bitboard::position::Position::empty();
+        let result = negamax(1, Color::White, &evaluator, &dummy_position);
         // Basic test that it returns a result
         assert!(result.score >= i32::MIN && result.score <= i32::MAX);
     }
