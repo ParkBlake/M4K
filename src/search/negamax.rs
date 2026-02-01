@@ -80,12 +80,41 @@ pub fn negamax(
         generate_king_moves(&mut moves, king_sq, occupied, enemies);
     }
 
-    // Filter legal moves
+    // Filter legal moves using real enemy attacks
     let king_sq = position
         .piece_bb(Piece::King, color)
         .lsb()
         .unwrap_or(crate::bitboard::Square::E1);
-    let enemy_attacks = crate::bitboard::Bitboard::EMPTY; // TODO: Compute real enemy attacks for legality
+
+    // Compute enemy attacks for legality
+    let mut enemy_attacks = crate::bitboard::Bitboard::EMPTY;
+    let opp_color = color.opposite();
+    let opp_pawns = position.piece_bb(Piece::Pawn, opp_color);
+    let opp_knights = position.piece_bb(Piece::Knight, opp_color);
+    let opp_bishops = position.piece_bb(Piece::Bishop, opp_color);
+    let opp_rooks = position.piece_bb(Piece::Rook, opp_color);
+    let opp_queens = position.piece_bb(Piece::Queen, opp_color);
+    let opp_king = position.piece_bb(Piece::King, opp_color);
+
+    for sq in opp_pawns.iter() {
+        enemy_attacks |= crate::bitboard::attacks::pawn_attacks(sq, opp_color);
+    }
+    for sq in opp_knights.iter() {
+        enemy_attacks |= crate::bitboard::attacks::knight_attacks(sq);
+    }
+    for sq in opp_bishops.iter() {
+        enemy_attacks |= crate::bitboard::attacks::bishop_attacks(sq, occupied);
+    }
+    for sq in opp_rooks.iter() {
+        enemy_attacks |= crate::bitboard::attacks::rook_attacks(sq, occupied);
+    }
+    for sq in opp_queens.iter() {
+        enemy_attacks |= crate::bitboard::attacks::queen_attacks(sq, occupied);
+    }
+    if let Some(ksq) = opp_king.lsb() {
+        enemy_attacks |= crate::bitboard::attacks::king_attacks(ksq);
+    }
+
     let legal_moves = filter_legal_moves(
         &moves,
         position.piece_bb(Piece::Pawn, color)
@@ -108,6 +137,39 @@ pub fn negamax(
     for &mv in legal_moves.iter() {
         let mut child_position = position.clone();
         let undo = child_position.make_move(mv);
+
+        // Compute enemy attacks for the child position
+        let mut child_enemy_attacks = crate::bitboard::Bitboard::EMPTY;
+        let child_opp_color = color;
+        let child_opp_pawns = child_position.piece_bb(Piece::Pawn, child_opp_color);
+        let child_opp_knights = child_position.piece_bb(Piece::Knight, child_opp_color);
+        let child_opp_bishops = child_position.piece_bb(Piece::Bishop, child_opp_color);
+        let child_opp_rooks = child_position.piece_bb(Piece::Rook, child_opp_color);
+        let child_opp_queens = child_position.piece_bb(Piece::Queen, child_opp_color);
+        let child_opp_king = child_position.piece_bb(Piece::King, child_opp_color);
+        let child_occupied = (0..6).fold(crate::bitboard::Bitboard::EMPTY, |acc, p| {
+            acc | child_position.piece_bb(Piece::from_u8(p).unwrap(), crate::bitboard::Color::White)
+                | child_position.piece_bb(Piece::from_u8(p).unwrap(), crate::bitboard::Color::Black)
+        });
+
+        for sq in child_opp_pawns.iter() {
+            child_enemy_attacks |= crate::bitboard::attacks::pawn_attacks(sq, child_opp_color);
+        }
+        for sq in child_opp_knights.iter() {
+            child_enemy_attacks |= crate::bitboard::attacks::knight_attacks(sq);
+        }
+        for sq in child_opp_bishops.iter() {
+            child_enemy_attacks |= crate::bitboard::attacks::bishop_attacks(sq, child_occupied);
+        }
+        for sq in child_opp_rooks.iter() {
+            child_enemy_attacks |= crate::bitboard::attacks::rook_attacks(sq, child_occupied);
+        }
+        for sq in child_opp_queens.iter() {
+            child_enemy_attacks |= crate::bitboard::attacks::queen_attacks(sq, child_occupied);
+        }
+        if let Some(ksq) = child_opp_king.lsb() {
+            child_enemy_attacks |= crate::bitboard::attacks::king_attacks(ksq);
+        }
 
         // Recursive search with negated color
         let result = negamax(depth - 1, color.opposite(), evaluator, &child_position);
