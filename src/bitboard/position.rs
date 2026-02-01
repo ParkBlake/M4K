@@ -8,6 +8,7 @@
 use crate::bitboard::{Bitboard, CastleRights, Color, Piece, Square};
 use crate::utils::zobrist::ZobristHash;
 use std::fmt;
+use std::str::FromStr;
 
 /// Position struct - encapsulates the full chess board state
 #[derive(Clone, PartialEq, Eq)]
@@ -37,6 +38,218 @@ impl Position {
             halfmove_clock: 0,
             fullmove_number: 1,
         }
+    }
+
+    /// Parse a FEN string and set the position accordingly.
+    pub fn set_fen(&mut self, fen: &str) -> Result<(), String> {
+        let parts: Vec<&str> = fen.trim().split_whitespace().collect();
+        if parts.len() < 4 {
+            return Err("FEN string must have at least 4 fields".to_string());
+        }
+
+        // Clear the board
+        *self = Position::empty();
+
+        // Piece placement
+        let mut rank = 7;
+        let mut file = 0;
+        for c in parts[0].chars() {
+            match c {
+                '/' => {
+                    if file != 8 {
+                        return Err("Invalid FEN: not enough squares in rank".to_string());
+                    }
+                    rank = rank.checked_sub(1).ok_or("Too many ranks in FEN")?;
+                    file = 0;
+                }
+                '1'..='8' => {
+                    file += c.to_digit(10).unwrap() as u8;
+                }
+                'p' | 'n' | 'b' | 'r' | 'q' | 'k' | 'P' | 'N' | 'B' | 'R' | 'Q' | 'K' => {
+                    let color = if c.is_uppercase() {
+                        Color::White
+                    } else {
+                        Color::Black
+                    };
+                    let piece = match c.to_ascii_lowercase() {
+                        'p' => Piece::Pawn,
+                        'n' => Piece::Knight,
+                        'b' => Piece::Bishop,
+                        'r' => Piece::Rook,
+                        'q' => Piece::Queen,
+                        'k' => Piece::King,
+                        _ => return Err(format!("Invalid piece char: {}", c)),
+                    };
+                    if file > 7 || rank > 7 {
+                        return Err("Invalid FEN: file or rank out of bounds".to_string());
+                    }
+                    self.set_piece(piece, color, Square::new(file, rank));
+                    file += 1;
+                }
+                _ => return Err(format!("Invalid FEN char: {}", c)),
+            }
+        }
+        if rank != 0 || file != 8 {
+            return Err("Invalid FEN: not all squares filled".to_string());
+        }
+
+        // Side to move
+        self.side_to_move = match parts[1] {
+            "w" => Color::White,
+            "b" => Color::Black,
+            _ => return Err("Invalid FEN: side to move".to_string()),
+        };
+
+        // Castling rights
+        self.castling_rights = CastleRights(0);
+        if parts[2] != "-" {
+            for c in parts[2].chars() {
+                match c {
+                    'K' => self.castling_rights.add(CastleRights::WHITE_KING),
+                    'Q' => self.castling_rights.add(CastleRights::WHITE_QUEEN),
+                    'k' => self.castling_rights.add(CastleRights::BLACK_KING),
+                    'q' => self.castling_rights.add(CastleRights::BLACK_QUEEN),
+                    _ => return Err(format!("Invalid castling char: {}", c)),
+                }
+            }
+        }
+
+        // En passant
+        self.en_passant = if parts[3] == "-" {
+            None
+        } else {
+            let bytes = parts[3].as_bytes();
+            if bytes.len() != 2 {
+                return Err("Invalid FEN: en passant square".to_string());
+            }
+            let file = bytes[0];
+            let rank = bytes[1];
+            let file_idx = match file {
+                b'a'..=b'h' => file - b'a',
+                _ => return Err("Invalid FEN: en passant file".to_string()),
+            };
+            let rank_idx = match rank {
+                b'1'..=b'8' => rank - b'1',
+                _ => return Err("Invalid FEN: en passant rank".to_string()),
+            };
+            Some(Square::new(file_idx, rank_idx))
+        };
+
+        // Halfmove clock
+        self.halfmove_clock = if parts.len() > 4 {
+            parts[4].parse().unwrap_or(0)
+        } else {
+            0
+        };
+
+        // Fullmove number
+        self.fullmove_number = if parts.len() > 5 {
+            parts[5].parse().unwrap_or(1)
+        } else {
+            1
+        };
+
+        Ok(())
+    }
+
+    /// Generate a FEN string from the current position.
+    pub fn to_fen(&self) -> String {
+        let mut fen = String::new();
+
+        // Piece placement
+        for rank in (0..8).rev() {
+            let mut empty = 0;
+            for file in 0..8 {
+                let sq = Square::new(file, rank);
+                let mut found = false;
+                for piece in 0..6 {
+                    for color in 0..2 {
+                        if self.pieces[piece][color].is_occupied(sq) {
+                            if empty > 0 {
+                                fen.push_str(&empty.to_string());
+                                empty = 0;
+                            }
+                            let symbol =
+                                match (Piece::from_u8(piece as u8), Color::from_u8(color as u8)) {
+                                    (Some(Piece::Pawn), Color::White) => 'P',
+                                    (Some(Piece::Pawn), Color::Black) => 'p',
+                                    (Some(Piece::Knight), Color::White) => 'N',
+                                    (Some(Piece::Knight), Color::Black) => 'n',
+                                    (Some(Piece::Bishop), Color::White) => 'B',
+                                    (Some(Piece::Bishop), Color::Black) => 'b',
+                                    (Some(Piece::Rook), Color::White) => 'R',
+                                    (Some(Piece::Rook), Color::Black) => 'r',
+                                    (Some(Piece::Queen), Color::White) => 'Q',
+                                    (Some(Piece::Queen), Color::Black) => 'q',
+                                    (Some(Piece::King), Color::White) => 'K',
+                                    (Some(Piece::King), Color::Black) => 'k',
+                                    _ => '?',
+                                };
+                            fen.push(symbol);
+                            found = true;
+                        }
+                    }
+                }
+                if !found {
+                    empty += 1;
+                }
+            }
+            if empty > 0 {
+                fen.push_str(&empty.to_string());
+            }
+            if rank > 0 {
+                fen.push('/');
+            }
+        }
+
+        // Side to move
+        fen.push(' ');
+        fen.push(match self.side_to_move {
+            Color::White => 'w',
+            Color::Black => 'b',
+        });
+
+        // Castling rights
+        fen.push(' ');
+        let mut rights = String::new();
+        if self.castling_rights.has(CastleRights::WHITE_KING) {
+            rights.push('K');
+        }
+        if self.castling_rights.has(CastleRights::WHITE_QUEEN) {
+            rights.push('Q');
+        }
+        if self.castling_rights.has(CastleRights::BLACK_KING) {
+            rights.push('k');
+        }
+        if self.castling_rights.has(CastleRights::BLACK_QUEEN) {
+            rights.push('q');
+        }
+        if rights.is_empty() {
+            fen.push('-');
+        } else {
+            fen.push_str(&rights);
+        }
+
+        // En passant
+        fen.push(' ');
+        if let Some(ep) = self.en_passant {
+            let file = (b'a' + ep.file()) as char;
+            let rank = (b'1' + ep.rank()) as char;
+            fen.push(file);
+            fen.push(rank);
+        } else {
+            fen.push('-');
+        }
+
+        // Halfmove clock
+        fen.push(' ');
+        fen.push_str(&self.halfmove_clock.to_string());
+
+        // Fullmove number
+        fen.push(' ');
+        fen.push_str(&self.fullmove_number.to_string());
+
+        fen
     }
 
     /// Compute the Zobrist hash for the current position.

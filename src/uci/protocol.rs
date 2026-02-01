@@ -34,12 +34,15 @@ impl UciEngine {
         let stdin = io::stdin();
         let mut stdout = io::stdout();
 
-        println!("id name PI5 Chess Engine");
+        println!("id name M4K Chess Engine");
         println!("id author Your Name");
         println!("uciok");
 
-        for line in stdin.lines() {
-            let line = line.unwrap();
+        for line in stdin.lock().lines() {
+            let line = match line {
+                Ok(l) => l,
+                Err(_) => continue,
+            };
             let command = line.trim();
 
             if command.is_empty() {
@@ -65,41 +68,62 @@ impl UciEngine {
             "uci" => Some("uciok".to_string()),
             "isready" => Some("readyok".to_string()),
             "ucinewgame" => {
-                // Reset engine state for new game
+                self.position.set_startpos();
                 Some("readyok".to_string())
             }
             "position" => {
-                // Parse position command
                 self.parse_position(&parts[1..]);
                 None
             }
             "go" => {
-                // Start search
                 let result = self.search();
                 Some(format!("bestmove {}", result.best_move.unwrap()))
             }
+            "d" | "display" => {
+                // Display current position as FEN and board
+                Some(format!(
+                    "info string FEN: {}\ninfo string Board:\n{:?}",
+                    self.position.to_fen(),
+                    self.position
+                ))
+            }
+            "fen" => {
+                // Output current FEN
+                Some(format!("info string FEN: {}", self.position.to_fen()))
+            }
             "quit" => None,
-            _ => None,
+            _ => Some(format!("info string Unknown command: {}", parts[0])),
         }
     }
 
     /// Parse position command
     fn parse_position(&mut self, args: &[&str]) {
-        // Supports only "startpos" for now, can be extended for FEN and moves
         if args.is_empty() {
             return;
         }
         if args[0] == "startpos" {
             self.position.set_startpos();
-            // Handle moves after "startpos"
             if let Some(moves_idx) = args.iter().position(|&x| x == "moves") {
                 for mv_str in &args[moves_idx + 1..] {
                     // TODO: parse and apply moves to self.position
-                    // This requires a move parser and make_move logic
+                }
+            }
+        } else if args[0] == "fen" {
+            // Parse FEN string (everything after "fen" up to "moves" or end)
+            let moves_idx = args.iter().position(|&x| x == "moves");
+            let fen_end = moves_idx.unwrap_or(args.len());
+            let fen_str = args[1..fen_end].join(" ");
+            if let Err(e) = self.position.set_fen(&fen_str) {
+                eprintln!("info string Invalid FEN: {}", e);
+                self.position.set_startpos();
+            }
+            // Handle moves after "moves"
+            if let Some(moves_idx) = moves_idx {
+                for mv_str in &args[moves_idx + 1..] {
+                    // TODO: parse and apply moves to self.position
                 }
             }
         }
-        // TODO: Add FEN parsing support if needed
     }
 
     /// Perform search
