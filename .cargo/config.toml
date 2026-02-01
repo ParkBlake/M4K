@@ -1,4 +1,3 @@
-moskrev/dev/projects/M4K/.cargo/config.toml
 [build]
 target = "aarch64-unknown-linux-gnu"
 
