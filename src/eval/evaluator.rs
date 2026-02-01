@@ -180,7 +180,8 @@ mod tests {
     fn test_evaluator_creation() {
         let evaluator = Evaluator::new();
         // Test that evaluation returns a reasonable score
-        let score = evaluator.evaluate();
+        let dummy_position = crate::bitboard::position::Position::empty();
+        let score = evaluator.evaluate(&dummy_position);
         assert!(score >= -20000 && score <= 20000); // Within reasonable bounds
     }
 }

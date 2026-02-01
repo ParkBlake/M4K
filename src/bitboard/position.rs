@@ -42,7 +42,7 @@ impl Position {
 
     /// Apply a move to the position, returning an Undo struct for unmaking.
     pub fn make_move(&mut self, mv: crate::movegen::Move) -> Undo {
-        use crate::bitboard::{Piece, Color};
+        use crate::bitboard::{Color, Piece};
         let from = mv.from();
         let to = mv.to();
         let color = self.side_to_move;
@@ -88,7 +88,11 @@ impl Position {
             crate::movegen::MoveType::EnPassant => {
                 self.pieces[moving_piece as usize][color as usize].set(to);
                 // Remove captured pawn
-                let ep_rank = if color == Color::White { to.rank() - 1 } else { to.rank() + 1 };
+                let ep_rank = if color == Color::White {
+                    to.rank() - 1
+                } else {
+                    to.rank() + 1
+                };
                 let ep_sq = Square::new(to.file(), ep_rank);
                 self.pieces[Piece::Pawn as usize][color.opposite() as usize].clear(ep_sq);
                 captured = Some(Piece::Pawn);
@@ -97,19 +101,23 @@ impl Position {
                 self.pieces[moving_piece as usize][color as usize].set(to);
                 // Move rook as well
                 match (from, to) {
-                    (Square::E1, Square::G1) => { // White kingside
+                    (Square::E1, Square::G1) => {
+                        // White kingside
                         self.pieces[Piece::Rook as usize][Color::White as usize].clear(Square::H1);
                         self.pieces[Piece::Rook as usize][Color::White as usize].set(Square::F1);
                     }
-                    (Square::E1, Square::C1) => { // White queenside
+                    (Square::E1, Square::C1) => {
+                        // White queenside
                         self.pieces[Piece::Rook as usize][Color::White as usize].clear(Square::A1);
                         self.pieces[Piece::Rook as usize][Color::White as usize].set(Square::D1);
                     }
-                    (Square::E8, Square::G8) => { // Black kingside
+                    (Square::E8, Square::G8) => {
+                        // Black kingside
                         self.pieces[Piece::Rook as usize][Color::Black as usize].clear(Square::H8);
                         self.pieces[Piece::Rook as usize][Color::Black as usize].set(Square::F8);
                     }
-                    (Square::E8, Square::C8) => { // Black queenside
+                    (Square::E8, Square::C8) => {
+                        // Black queenside
                         self.pieces[Piece::Rook as usize][Color::Black as usize].clear(Square::A8);
                         self.pieces[Piece::Rook as usize][Color::Black as usize].set(Square::D8);
                     }
@@ -175,7 +183,7 @@ impl Position {
 
     /// Undo a move using the Undo struct.
     pub fn unmake_move(&mut self, undo: Undo) {
-        use crate::bitboard::{Piece, Color};
+        use crate::bitboard::{Color, Piece};
         let from = undo.mv.from();
         let to = undo.mv.to();
         let color = self.side_to_move.opposite();
@@ -224,7 +232,11 @@ impl Position {
             crate::movegen::MoveType::EnPassant => {
                 self.pieces[moving_piece as usize][color as usize].set(from);
                 // Restore captured pawn
-                let ep_rank = if color == Color::White { to.rank() - 1 } else { to.rank() + 1 };
+                let ep_rank = if color == Color::White {
+                    to.rank() - 1
+                } else {
+                    to.rank() + 1
+                };
                 let ep_sq = Square::new(to.file(), ep_rank);
                 self.pieces[Piece::Pawn as usize][color.opposite() as usize].set(ep_sq);
             }
@@ -232,19 +244,23 @@ impl Position {
                 self.pieces[moving_piece as usize][color as usize].set(from);
                 // Move rook back
                 match (from, to) {
-                    (Square::E1, Square::G1) => { // White kingside
+                    (Square::E1, Square::G1) => {
+                        // White kingside
                         self.pieces[Piece::Rook as usize][Color::White as usize].clear(Square::F1);
                         self.pieces[Piece::Rook as usize][Color::White as usize].set(Square::H1);
                     }
-                    (Square::E1, Square::C1) => { // White queenside
+                    (Square::E1, Square::C1) => {
+                        // White queenside
                         self.pieces[Piece::Rook as usize][Color::White as usize].clear(Square::D1);
                         self.pieces[Piece::Rook as usize][Color::White as usize].set(Square::A1);
                     }
-                    (Square::E8, Square::G8) => { // Black kingside
+                    (Square::E8, Square::G8) => {
+                        // Black kingside
                         self.pieces[Piece::Rook as usize][Color::Black as usize].clear(Square::F8);
                         self.pieces[Piece::Rook as usize][Color::Black as usize].set(Square::H8);
                     }
-                    (Square::E8, Square::C8) => { // Black queenside
+                    (Square::E8, Square::C8) => {
+                        // Black queenside
                         self.pieces[Piece::Rook as usize][Color::Black as usize].clear(Square::D8);
                         self.pieces[Piece::Rook as usize][Color::Black as usize].set(Square::A8);
                     }
@@ -466,107 +482,106 @@ impl Position {
         fen
     }
 
-   /// Compute the Zobrist hash for the current position.
-   pub fn zobrist_hash(&self) -> ZobristHash {
-       use crate::utils::zobrist::{
-           ZOBRIST_BLACK_TO_MOVE, ZOBRIST_CASTLE, ZOBRIST_EN_PASSANT, ZOBRIST_PIECE_SQUARE,
-       };
+    /// Compute the Zobrist hash for the current position.
+    pub fn zobrist_hash(&self) -> ZobristHash {
+        use crate::utils::zobrist::{
+            ZOBRIST_BLACK_TO_MOVE, ZOBRIST_CASTLE, ZOBRIST_EN_PASSANT, ZOBRIST_PIECE_SQUARE,
+        };
 
-       let mut hash = 0u64;
+        let mut hash = 0u64;
 
-       // Pieces
-       for piece in 0..6 {
-           for color in 0..2 {
-               let mut bb = self.pieces[piece][color];
-               while let Some(sq) = bb.pop_lsb() {
-                   hash ^= ZOBRIST_PIECE_SQUARE[piece][color][sq.0 as usize];
-               }
-           }
-       }
+        // Pieces
+        for piece in 0..6 {
+            for color in 0..2 {
+                let mut bb = self.pieces[piece][color];
+                while let Some(sq) = bb.pop_lsb() {
+                    hash ^= ZOBRIST_PIECE_SQUARE[piece][color][sq.0 as usize];
+                }
+            }
+        }
 
-       // Side to move
-       if self.side_to_move == Color::Black {
-           hash ^= *ZOBRIST_BLACK_TO_MOVE;
-       }
+        // Side to move
+        if self.side_to_move == Color::Black {
+            hash ^= *ZOBRIST_BLACK_TO_MOVE;
+        }
 
-       // Castling rights
-       hash ^= ZOBRIST_CASTLE[self.castling_rights.0 as usize];
+        // Castling rights
+        hash ^= ZOBRIST_CASTLE[self.castling_rights.0 as usize];
 
-       // En passant
-       if let Some(ep_sq) = self.en_passant {
-           hash ^= ZOBRIST_EN_PASSANT[ep_sq.file() as usize];
-       }
+        // En passant
+        if let Some(ep_sq) = self.en_passant {
+            hash ^= ZOBRIST_EN_PASSANT[ep_sq.file() as usize];
+        }
 
-       ZobristHash(hash)
-   }
+        ZobristHash(hash)
+    }
 }
 
 /// Undo information for unmaking a move.
 #[derive(Clone, Debug)]
 pub struct Undo {
-   pub mv: crate::movegen::Move,
-   pub captured: Option<crate::bitboard::Piece>,
-   pub prev_castling: CastleRights,
-   pub prev_en_passant: Option<Square>,
-   pub prev_halfmove: u32,
+    pub mv: crate::movegen::Move,
+    pub captured: Option<crate::bitboard::Piece>,
+    pub prev_castling: CastleRights,
+    pub prev_en_passant: Option<Square>,
+    pub prev_halfmove: u32,
 }
 
-    /// Place a piece on the board.
-    pub fn set_piece(&mut self, piece: Piece, color: Color, sq: Square) {
-        self.pieces[piece as usize][color as usize].set(sq);
+/// Place a piece on the board.
+pub fn set_piece(&mut self, piece: Piece, color: Color, sq: Square) {
+    self.pieces[piece as usize][color as usize].set(sq);
+}
+
+/// Remove a piece from the board.
+pub fn remove_piece(&mut self, piece: Piece, color: Color, sq: Square) {
+    self.pieces[piece as usize][color as usize].clear(sq);
+}
+
+/// Get the bitboard for a given piece and color.
+pub fn piece_bb(&self, piece: Piece, color: Color) -> Bitboard {
+    self.pieces[piece as usize][color as usize]
+}
+
+/// Set up the standard chess starting position.
+pub fn set_startpos(&mut self) {
+    use Color::*;
+    use Piece::*;
+    use Square::*;
+
+    *self = Position::empty();
+
+    // Pawns
+    for file in 0..8 {
+        self.set_piece(Pawn, White, Square::new(file, 1));
+        self.set_piece(Pawn, Black, Square::new(file, 6));
     }
+    // Knights
+    self.set_piece(Knight, White, B1);
+    self.set_piece(Knight, White, G1);
+    self.set_piece(Knight, Black, B8);
+    self.set_piece(Knight, Black, G8);
+    // Bishops
+    self.set_piece(Bishop, White, C1);
+    self.set_piece(Bishop, White, F1);
+    self.set_piece(Bishop, Black, C8);
+    self.set_piece(Bishop, Black, F8);
+    // Rooks
+    self.set_piece(Rook, White, A1);
+    self.set_piece(Rook, White, H1);
+    self.set_piece(Rook, Black, A8);
+    self.set_piece(Rook, Black, H8);
+    // Queens
+    self.set_piece(Queen, White, D1);
+    self.set_piece(Queen, Black, D8);
+    // Kings
+    self.set_piece(King, White, E1);
+    self.set_piece(King, Black, E8);
 
-    /// Remove a piece from the board.
-    pub fn remove_piece(&mut self, piece: Piece, color: Color, sq: Square) {
-        self.pieces[piece as usize][color as usize].clear(sq);
-    }
-
-    /// Get the bitboard for a given piece and color.
-    pub fn piece_bb(&self, piece: Piece, color: Color) -> Bitboard {
-        self.pieces[piece as usize][color as usize]
-    }
-
-    /// Set up the standard chess starting position.
-    pub fn set_startpos(&mut self) {
-        use Color::*;
-        use Piece::*;
-        use Square::*;
-
-        *self = Position::empty();
-
-        // Pawns
-        for file in 0..8 {
-            self.set_piece(Pawn, White, Square::new(file, 1));
-            self.set_piece(Pawn, Black, Square::new(file, 6));
-        }
-        // Knights
-        self.set_piece(Knight, White, B1);
-        self.set_piece(Knight, White, G1);
-        self.set_piece(Knight, Black, B8);
-        self.set_piece(Knight, Black, G8);
-        // Bishops
-        self.set_piece(Bishop, White, C1);
-        self.set_piece(Bishop, White, F1);
-        self.set_piece(Bishop, Black, C8);
-        self.set_piece(Bishop, Black, F8);
-        // Rooks
-        self.set_piece(Rook, White, A1);
-        self.set_piece(Rook, White, H1);
-        self.set_piece(Rook, Black, A8);
-        self.set_piece(Rook, Black, H8);
-        // Queens
-        self.set_piece(Queen, White, D1);
-        self.set_piece(Queen, Black, D8);
-        // Kings
-        self.set_piece(King, White, E1);
-        self.set_piece(King, Black, E8);
-
-        self.side_to_move = White;
-        self.castling_rights = CastleRights::ALL;
-        self.en_passant = None;
-        self.halfmove_clock = 0;
-        self.fullmove_number = 1;
-    }
+    self.side_to_move = White;
+    self.castling_rights = CastleRights::ALL;
+    self.en_passant = None;
+    self.halfmove_clock = 0;
+    self.fullmove_number = 1;
 }
 
 impl fmt::Debug for Position {
