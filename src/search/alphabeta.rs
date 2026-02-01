@@ -368,12 +368,15 @@ pub fn iterative_deepening(
     stop_flag: &Arc<AtomicBool>,
 ) -> SearchResult {
     let time_manager = TimeManager::new(time_control, color);
-    let max_depth = time_control.depth.unwrap_or(8) as i32; // Increased default depth
+    let max_depth = time_control.depth.unwrap_or(8) as i32;
     let mut result = SearchResult {
         best_move: None,
         score: 0,
         nodes_searched: 0,
     };
+
+    // Generate at least one legal move as fallback
+    let fallback_move = generate_fallback_move(position, color);
 
     // Iterative deepening with time management
     for depth in 1..=max_depth {
@@ -382,14 +385,12 @@ pub fn iterative_deepening(
         }
 
         // Check if we have enough time for this depth
-        // Estimate time needed: roughly 4x the time for previous depth
         if depth > 1 {
             let elapsed = time_manager.elapsed();
-            let estimated_next_time = elapsed.mul_f32(4.0); // Rough estimate
+            let estimated_next_time = elapsed.mul_f32(4.0);
 
             if let Some(remaining) = time_manager.remaining_time() {
                 if estimated_next_time > remaining.mul_f32(0.8) {
-                    // Don't start this depth if we might not finish it
                     break;
                 }
             }
@@ -419,7 +420,6 @@ pub fn iterative_deepening(
         if depth >= 6 {
             let elapsed = time_manager.elapsed();
             if let Some(remaining) = time_manager.remaining_time() {
-                // If we've used more than 60% of our time, stop
                 if elapsed.as_millis() as f32 > (time_manager.allocated_time.as_millis() as f32 * 0.6) {
                     break;
                 }
@@ -427,7 +427,67 @@ pub fn iterative_deepening(
         }
     }
 
+    // Guarantee we have a move to return
+    if result.best_move.is_none() {
+        result.best_move = fallback_move;
+    }
+
     result
+}
+
+/// Generate a fallback move (first legal move found)
+fn generate_fallback_move(position: &crate::bitboard::position::Position, color: Color) -> Option<Move> {
+    use crate::bitboard::Piece;
+    use crate::movegen::generator::*;
+    use crate::movegen::legal::filter_legal_moves;
+
+    let mut moves = MoveList::new();
+    let occupied = (0..6).fold(Bitboard::EMPTY, |acc, p| {
+        acc | position.piece_bb(Piece::from_u8(p).unwrap(), crate::bitboard::Color::White)
+            | position.piece_bb(Piece::from_u8(p).unwrap(), crate::bitboard::Color::Black)
+    });
+    let enemies = (0..6).fold(crate::bitboard::Bitboard::EMPTY, |acc, p| {
+        acc | position.piece_bb(Piece::from_u8(p).unwrap(), color.opposite())
+    });
+
+    generate_pawn_moves(
+        &mut moves,
+        position.piece_bb(Piece::Pawn, color),
+        occupied,
+        enemies,
+        color,
+        position.en_passant,
+    );
+    generate_knight_moves(
+        &mut moves,
+        position.piece_bb(Piece::Knight, color),
+        occupied,
+        enemies,
+    );
+    generate_bishop_moves(
+        &mut moves,
+        position.piece_bb(Piece::Bishop, color),
+        occupied,
+        enemies,
+    );
+    generate_rook_moves(
+        &mut moves,
+        position.piece_bb(Piece::Rook, color),
+        occupied,
+        enemies,
+    );
+    generate_queen_moves(
+        &mut moves,
+        position.piece_bb(Piece::Queen, color),
+        occupied,
+        enemies,
+    );
+    if let Some(king_sq) = position.piece_bb(Piece::King, color).lsb() {
+        generate_king_moves(&mut moves, king_sq, occupied, enemies);
+    }
+
+    let legal_moves = filter_legal_moves(&moves, position, color);
+    legal_moves.iter().next().copied()
 }
 
 #[cfg(test)]

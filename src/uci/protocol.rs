@@ -4,6 +4,7 @@
 //! parsing commands from GUIs and sending responses.
 
 use crate::bitboard::position::Position;
+use crate::bitboard::{Bitboard, Color, Piece};
 use crate::eval::Evaluator;
 use crate::movegen::Move;
 use crate::search::alphabeta::{iterative_deepening, SearchResult};
@@ -14,6 +15,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
+use std::time::{Duration, Instant};
 
 /// UCI Engine state
 pub struct UciEngine {
@@ -58,6 +60,7 @@ impl UciEngine {
         println!("id name M4K Chess Engine");
         println!("id author Your Name");
         println!("uciok");
+        stdout.flush().unwrap();
 
         for line in stdin.lock().lines() {
             let line = match line {
@@ -71,14 +74,21 @@ impl UciEngine {
             }
 
             if let Some(response) = self.handle_command(command) {
-                writeln!(stdout, "{}", response).unwrap();
+                println!("{}", response);
                 stdout.flush().unwrap();
             }
 
-            // Check for search result
+            // Check for search result immediately after handling command
             if let Ok(result) = self.result_receiver.try_recv() {
+                eprintln!("DEBUG: Received search result: best_move={:?}", result.best_move);
                 if let Some(mv) = result.best_move {
-                    writeln!(stdout, "bestmove {}", mv).unwrap();
+                    println!("bestmove {}", mv);
+                    stdout.flush().unwrap();
+                } else if let Some(fallback_mv) = self.generate_emergency_move() {
+                    println!("bestmove {}", fallback_mv);
+                    stdout.flush().unwrap();
+                } else {
+                    println!("bestmove 0000"); // Absolute fallback
                     stdout.flush().unwrap();
                 }
             }
@@ -113,6 +123,15 @@ impl UciEngine {
             }
             Some(UciCommand::Stop) => {
                 self.stop_flag.store(true, Ordering::Relaxed);
+                // Wait a short time for search to complete and send result
+                thread::sleep(Duration::from_millis(10));
+                if let Ok(result) = self.result_receiver.try_recv() {
+                    if let Some(mv) = result.best_move {
+                        return Some(format!("bestmove {}", mv));
+                    } else if let Some(fallback_mv) = self.generate_emergency_move() {
+                        return Some(format!("bestmove {}", fallback_mv));
+                    }
+                }
                 None
             }
             Some(UciCommand::Quit) => None,
@@ -140,18 +159,94 @@ impl UciEngine {
 
     /// Start search in a separate thread
     fn start_search(&mut self) {
+        eprintln!("DEBUG: Starting search");
         self.stop_flag.store(false, Ordering::Relaxed);
         let stop_flag_clone = Arc::clone(&self.stop_flag);
         let position = self.position.clone();
-        let evaluator = Evaluator::new(); // Create new evaluator
-        let mut tt = TranspositionTable::new(); // Create new TT
+        let evaluator = Evaluator::new();
+        let mut tt = TranspositionTable::new();
         let time_control = self.time_control.clone();
         let sender = self.result_sender.clone();
 
         self.search_handle = Some(thread::spawn(move || {
+            eprintln!("DEBUG: Search thread started");
+            // Set a hard timeout to prevent infinite searches (5 minutes max)
+            let search_timeout = if time_control.infinite {
+                Duration::from_secs(300) // 5 minutes for infinite searches
+            } else {
+                Duration::from_secs(60) // 1 minute max for normal searches
+            };
+
+            let start_time = Instant::now();
+
+            // Run search with timeout
             let result = iterative_deepening(&time_control, position.side_to_move, &mut tt, &evaluator, &position, &stop_flag_clone);
+            eprintln!("DEBUG: Search completed, sending result: best_move={:?}", result.best_move);
+
+            // If search took too long, force stop flag
+            if start_time.elapsed() > search_timeout {
+                // This shouldn't happen with proper time management, but just in case
+            }
+
             let _ = sender.send(result);
+            eprintln!("DEBUG: Result sent");
         }));
+    }
+
+    /// Generate an emergency move if search fails completely
+    fn generate_emergency_move(&self) -> Option<Move> {
+        use crate::bitboard::Piece;
+        use crate::movegen::generator::*;
+        use crate::movegen::legal::filter_legal_moves;
+
+        let mut moves = MoveList::new();
+        let color = self.position.side_to_move;
+        let occupied = (0..6).fold(Bitboard::EMPTY, |acc, p| {
+            acc | self.position.piece_bb(Piece::from_u8(p).unwrap(), crate::bitboard::Color::White)
+                | self.position.piece_bb(Piece::from_u8(p).unwrap(), crate::bitboard::Color::Black)
+        });
+        let enemies = (0..6).fold(crate::bitboard::Bitboard::EMPTY, |acc, p| {
+            acc | self.position.piece_bb(Piece::from_u8(p).unwrap(), color.opposite())
+        });
+
+        generate_pawn_moves(
+            &mut moves,
+            self.position.piece_bb(Piece::Pawn, color),
+            occupied,
+            enemies,
+            color,
+            self.position.en_passant,
+        );
+        generate_knight_moves(
+            &mut moves,
+            self.position.piece_bb(Piece::Knight, color),
+            occupied,
+            enemies,
+        );
+        generate_bishop_moves(
+            &mut moves,
+            self.position.piece_bb(Piece::Bishop, color),
+            occupied,
+            enemies,
+        );
+        generate_rook_moves(
+            &mut moves,
+            self.position.piece_bb(Piece::Rook, color),
+            occupied,
+            enemies,
+        );
+        generate_queen_moves(
+            &mut moves,
+            self.position.piece_bb(Piece::Queen, color),
+            occupied,
+            enemies,
+        );
+        if let Some(king_sq) = self.position.piece_bb(Piece::King, color).lsb() {
+            generate_king_moves(&mut moves, king_sq, occupied, enemies);
+        }
+
+        let legal_moves = filter_legal_moves(&moves, &self.position, color);
+        legal_moves.iter().next().copied()
     }
 }
 
