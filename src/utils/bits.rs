@@ -82,7 +82,11 @@ pub fn rotate_right(x: u64, n: u32) -> u64 {
 /// Extract bits from position 'start' to 'end' (inclusive)
 #[inline(always)]
 pub fn extract_bits(x: u64, start: u32, end: u32) -> u64 {
-    let mask = if end >= 63 { u64::MAX } else { (1 << (end + 1)) - 1 };
+    let mask = if end >= 63 {
+        u64::MAX
+    } else {
+        (1 << (end + 1)) - 1
+    };
     (x & mask) >> start
 }
 
