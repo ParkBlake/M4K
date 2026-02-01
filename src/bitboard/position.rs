@@ -1,8 +1,15 @@
+/*!
+    Position module - Complete chess position representation
+
+    This module provides the Position struct, which encapsulates the full state of a chess board,
+    including piece placement, side to move, castling rights, en passant, and move counters.
+*/
+
 use crate::bitboard::{Bitboard, CastleRights, Color, Piece, Square};
 use crate::utils::zobrist::ZobristHash;
 use std::fmt;
 
-/// Represents the full state of a chess position.
+/// Position struct - encapsulates the full chess board state
 #[derive(Clone, PartialEq, Eq)]
 pub struct Position {
     /// Bitboards for each piece type and color: [piece][color]
@@ -166,6 +173,42 @@ impl fmt::Debug for Position {
         writeln!(f, "Halfmove clock: {}", self.halfmove_clock)?;
         writeln!(f, "Fullmove number: {}", self.fullmove_number)?;
         Ok(())
+    }
+}
+
+// Tests for Position
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bitboard::{Color, Piece, Square};
+
+    #[test]
+    fn test_startpos_zobrist_hash_consistency() {
+        let mut pos = Position::empty();
+        pos.set_startpos();
+        let hash1 = pos.zobrist_hash();
+        let hash2 = pos.zobrist_hash();
+        assert_eq!(
+            hash1, hash2,
+            "Zobrist hash should be consistent for startpos"
+        );
+    }
+
+    #[test]
+    fn test_piece_placement_and_removal() {
+        let mut pos = Position::empty();
+        pos.set_piece(Piece::Knight, Color::White, Square::E4);
+        assert_eq!(
+            pos.piece_bb(Piece::Knight, Color::White)
+                .is_occupied(Square::E4),
+            true
+        );
+        pos.remove_piece(Piece::Knight, Color::White, Square::E4);
+        assert_eq!(
+            pos.piece_bb(Piece::Knight, Color::White)
+                .is_occupied(Square::E4),
+            false
+        );
     }
 }
 
