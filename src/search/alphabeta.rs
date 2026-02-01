@@ -9,6 +9,108 @@ use crate::movegen::{Move, MoveList};
 use crate::search::transposition::{TTEntry, TranspositionTable};
 use crate::uci::commands::TimeControl;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
+
+/// Time management for search
+struct TimeManager {
+    start_time: Instant,
+    time_limit: Option<Duration>,
+    max_time: Option<Duration>,
+    allocated_time: Duration,
+}
+
+impl TimeManager {
+    /// Create a new time manager for the given time control
+    fn new(time_control: &TimeControl, color: Color) -> Self {
+        let start_time = Instant::now();
+
+        // Calculate time allocation based on time control type
+        let (time_limit, max_time, allocated_time) = if time_control.infinite {
+            // Infinite time - no limits
+            (None, None, Duration::from_secs(3600)) // 1 hour fallback
+        } else if let Some(movetime) = time_control.movetime {
+            // Fixed time per move
+            let duration = Duration::from_millis(movetime);
+            (Some(duration), Some(duration), duration)
+        } else {
+            // Time-based game with increments
+            let (our_time, our_inc) = match color {
+                Color::White => (time_control.wtime, time_control.winc),
+                Color::Black => (time_control.btime, time_control.binc),
+            };
+
+            if let Some(our_time_ms) = our_time {
+                let our_time = Duration::from_millis(our_time_ms);
+                let our_inc = our_inc.map(|inc| Duration::from_millis(inc)).unwrap_or(Duration::ZERO);
+
+                // Calculate moves to go (default to 40 if not specified)
+                let moves_to_go = time_control.movestogo.unwrap_or(40) as u32;
+
+                // Allocate time for this move: (remaining_time / moves_to_go) + increment
+                // Use a more conservative allocation to avoid timeouts
+                let base_allocation = our_time.checked_div(moves_to_go).unwrap_or(Duration::from_millis(100));
+                let allocated = base_allocation.saturating_add(our_inc.saturating_mul(3).checked_div(4).unwrap_or(Duration::ZERO));
+
+                // Set hard time limit to 90% of allocated time to be safe
+                let time_limit = Some(allocated.mul_f32(0.9));
+
+                // Maximum time is 5x the allocated time (for emergencies)
+                let max_time = Some(allocated.saturating_mul(5));
+
+                (time_limit, max_time, allocated)
+            } else {
+                // No time information - use default
+                let default_time = Duration::from_millis(1000);
+                (Some(default_time), Some(default_time), default_time)
+            }
+        };
+
+        TimeManager {
+            start_time,
+            time_limit,
+            max_time,
+            allocated_time,
+        }
+    }
+
+    /// Check if we should stop searching due to time constraints
+    fn should_stop(&self) -> bool {
+        let elapsed = self.start_time.elapsed();
+
+        // Check hard time limit
+        if let Some(limit) = self.time_limit {
+            if elapsed >= limit {
+                return true;
+            }
+        }
+
+        // Check maximum time (emergency stop)
+        if let Some(max) = self.max_time {
+            if elapsed >= max {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Get elapsed time since search started
+    fn elapsed(&self) -> Duration {
+        self.start_time.elapsed()
+    }
+
+    /// Get remaining time before hard limit
+    fn remaining_time(&self) -> Option<Duration> {
+        self.time_limit.map(|limit| {
+            let elapsed = self.elapsed();
+            if elapsed >= limit {
+                Duration::ZERO
+            } else {
+                limit - elapsed
+            }
+        })
+    }
+}
 use std::sync::Arc;
 
 /// Search result containing the best move and score
@@ -78,6 +180,8 @@ pub fn alpha_beta_search(
     evaluator: &Evaluator,
     position: &crate::bitboard::position::Position,
     stop_flag: &Arc<AtomicBool>,
+    start_time: Instant,
+    time_limit: Option<Duration>,
 ) -> SearchResult {
     let mut result = SearchResult {
         best_move: None,
@@ -116,7 +220,7 @@ pub fn alpha_beta_search(
 
     // Base case: depth 0, go to quiescence
     if depth == 0 {
-        result.score = quiescence_search(alpha, beta, color, evaluator, position, stop_flag);
+        result.score = quiescence_search(alpha, beta, color, evaluator, position, stop_flag, start_time, time_limit);
         return result;
     }
 
@@ -193,6 +297,13 @@ pub fn alpha_beta_search(
             break;
         }
 
+        // Check time limit
+        if let Some(limit) = time_limit {
+            if start_time.elapsed() >= limit {
+                break;
+            }
+        }
+
         let mut child_position = position.clone();
         let undo = child_position.make_move(mv);
 
@@ -206,6 +317,8 @@ pub fn alpha_beta_search(
             evaluator,
             &child_position,
             stop_flag,
+            start_time,
+            time_limit,
         );
 
         let score = -child_result.score;
@@ -254,16 +367,32 @@ pub fn iterative_deepening(
     position: &crate::bitboard::position::Position,
     stop_flag: &Arc<AtomicBool>,
 ) -> SearchResult {
-    let max_depth = time_control.depth.unwrap_or(4) as i32;
+    let time_manager = TimeManager::new(time_control, color);
+    let max_depth = time_control.depth.unwrap_or(8) as i32; // Increased default depth
     let mut result = SearchResult {
         best_move: None,
         score: 0,
         nodes_searched: 0,
     };
 
+    // Iterative deepening with time management
     for depth in 1..=max_depth {
         if stop_flag.load(Ordering::Relaxed) {
             break;
+        }
+
+        // Check if we have enough time for this depth
+        // Estimate time needed: roughly 4x the time for previous depth
+        if depth > 1 {
+            let elapsed = time_manager.elapsed();
+            let estimated_next_time = elapsed.mul_f32(4.0); // Rough estimate
+
+            if let Some(remaining) = time_manager.remaining_time() {
+                if estimated_next_time > remaining.mul_f32(0.8) {
+                    // Don't start this depth if we might not finish it
+                    break;
+                }
+            }
         }
 
         let window_result = alpha_beta_search(
@@ -275,11 +404,27 @@ pub fn iterative_deepening(
             evaluator,
             position,
             stop_flag,
+            time_manager.start_time,
+            time_manager.time_limit,
         );
 
         result = window_result;
 
-        // Could add time management here
+        // Check time after each depth
+        if time_manager.should_stop() {
+            break;
+        }
+
+        // For deeper searches, be more conservative about time
+        if depth >= 6 {
+            let elapsed = time_manager.elapsed();
+            if let Some(remaining) = time_manager.remaining_time() {
+                // If we've used more than 60% of our time, stop
+                if elapsed.as_millis() as f32 > (time_manager.allocated_time.as_millis() as f32 * 0.6) {
+                    break;
+                }
+            }
+        }
     }
 
     result
@@ -295,6 +440,7 @@ mod tests {
         let mut tt = TranspositionTable::new();
         let evaluator = Evaluator::new();
         let stop_flag = Arc::new(AtomicBool::new(false));
+        let start_time = Instant::now();
 
         let dummy_position = crate::bitboard::position::Position::empty();
         let result = alpha_beta_search(
@@ -306,6 +452,8 @@ mod tests {
             &evaluator,
             &dummy_position,
             &stop_flag,
+            start_time,
+            Some(Duration::from_secs(1)),
         );
 
         // In a real test, we'd have a position and check the result

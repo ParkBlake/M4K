@@ -8,6 +8,7 @@ use crate::eval::Evaluator;
 use crate::movegen::Move;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 
 /// Quiescence search to evaluate quiet positions
 ///
@@ -20,6 +21,8 @@ pub fn quiescence_search(
     evaluator: &Evaluator,
     position: &crate::bitboard::position::Position,
     stop_flag: &Arc<AtomicBool>,
+    start_time: Instant,
+    time_limit: Option<Duration>,
 ) -> i32 {
     // Stand pat: evaluate the current position
     let stand_pat = evaluator.evaluate(position);
@@ -108,11 +111,18 @@ pub fn quiescence_search(
             break;
         }
 
+        // Check time limit
+        if let Some(limit) = time_limit {
+            if start_time.elapsed() >= limit {
+                break;
+            }
+        }
+
         let mut child_position = position.clone();
         let undo = child_position.make_move(mv);
 
         // Recursive quiescence search
-        let score = -quiescence_search(-beta, -alpha, color.opposite(), evaluator, &child_position, stop_flag);
+        let score = -quiescence_search(-beta, -alpha, color.opposite(), evaluator, &child_position, stop_flag, start_time, time_limit);
 
         child_position.unmake_move(undo);
 
@@ -147,6 +157,7 @@ mod tests {
     fn test_quiescence_structure() {
         let evaluator = Evaluator::new();
         let stop_flag = Arc::new(AtomicBool::new(false));
+        let start_time = Instant::now();
 
         // Basic test that quiescence search can be called
         let dummy_position = crate::bitboard::position::Position::empty();
@@ -157,6 +168,8 @@ mod tests {
             &evaluator,
             &dummy_position,
             &stop_flag,
+            start_time,
+            Some(Duration::from_secs(1)),
         );
 
         // In a real test, we'd check the score bounds
