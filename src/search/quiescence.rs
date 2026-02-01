@@ -20,7 +20,11 @@ pub fn quiescence_search(
 ) -> i32 {
     // Stand pat: evaluate the current position
     let stand_pat = evaluator.evaluate(/*position*/);
-    let stand_pat = if color == Color::White { stand_pat } else { -stand_pat };
+    let stand_pat = if color == Color::White {
+        stand_pat
+    } else {
+        -stand_pat
+    };
 
     // Beta cutoff: if standing pat is better than beta, we can stop
     if stand_pat >= beta {
@@ -76,12 +80,7 @@ mod tests {
         let evaluator = Evaluator::new();
 
         // Basic test that quiescence search can be called
-        let score = quiescence_search(
-            i32::MIN / 2,
-            i32::MAX / 2,
-            Color::White,
-            &evaluator,
-        );
+        let score = quiescence_search(i32::MIN / 2, i32::MAX / 2, Color::White, &evaluator);
 
         // In a real test, we'd check the score bounds
         assert!(score >= i32::MIN / 2 && score <= i32::MAX / 2);
