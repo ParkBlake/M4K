@@ -16,10 +16,10 @@ pub fn quiescence_search(
     beta: i32,
     color: Color,
     evaluator: &Evaluator,
-    // Position parameters would be passed here
+    position: &crate::bitboard::position::Position,
 ) -> i32 {
     // Stand pat: evaluate the current position
-    let stand_pat = evaluator.evaluate(/*position*/);
+    let stand_pat = evaluator.evaluate(position);
     let stand_pat = if color == Color::White {
         stand_pat
     } else {
@@ -43,7 +43,7 @@ pub fn quiescence_search(
         // make_move(position, mv);
 
         // Recursive quiescence search
-        let score = -quiescence_search(-beta, -alpha, color.opposite(), evaluator);
+        let score = -quiescence_search(-beta, -alpha, color.opposite(), evaluator, position);
 
         // Unmake capture (placeholder)
         // unmake_move(position, mv);
@@ -80,7 +80,14 @@ mod tests {
         let evaluator = Evaluator::new();
 
         // Basic test that quiescence search can be called
-        let score = quiescence_search(i32::MIN / 2, i32::MAX / 2, Color::White, &evaluator);
+        let dummy_position = crate::bitboard::position::Position::empty();
+        let score = quiescence_search(
+            i32::MIN / 2,
+            i32::MAX / 2,
+            Color::White,
+            &evaluator,
+            &dummy_position,
+        );
 
         // In a real test, we'd check the score bounds
         assert!(score >= i32::MIN / 2 && score <= i32::MAX / 2);

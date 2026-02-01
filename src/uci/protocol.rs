@@ -3,19 +3,30 @@
 //! This module handles the Universal Chess Interface protocol,
 //! parsing commands from GUIs and sending responses.
 
+use crate::bitboard::position::Position;
+use crate::eval::Evaluator;
 use crate::movegen::Move;
-use crate::search::alphabeta::SearchResult;
+use crate::search::alphabeta::{iterative_deepening, SearchResult};
+use crate::search::transposition::TranspositionTable;
 use std::io::{self, BufRead, Write};
 
 /// UCI Engine state
 pub struct UciEngine {
-    // Engine state would be stored here
+    position: Position,
+    evaluator: Evaluator,
+    tt: TranspositionTable,
 }
 
 impl UciEngine {
     /// Create a new UCI engine
     pub fn new() -> Self {
-        UciEngine {}
+        let mut position = Position::empty();
+        position.set_startpos();
+        UciEngine {
+            position,
+            evaluator: Evaluator::new(),
+            tt: TranspositionTable::new(),
+        }
     }
 
     /// Run the main UCI loop
@@ -74,21 +85,34 @@ impl UciEngine {
 
     /// Parse position command
     fn parse_position(&mut self, args: &[&str]) {
-        // Placeholder - would parse FEN or moves
-        // For now, just acknowledge
+        // Supports only "startpos" for now, can be extended for FEN and moves
+        if args.is_empty() {
+            return;
+        }
+        if args[0] == "startpos" {
+            self.position.set_startpos();
+            // Handle moves after "startpos"
+            if let Some(moves_idx) = args.iter().position(|&x| x == "moves") {
+                for mv_str in &args[moves_idx + 1..] {
+                    // TODO: parse and apply moves to self.position
+                    // This requires a move parser and make_move logic
+                }
+            }
+        }
+        // TODO: Add FEN parsing support if needed
     }
 
     /// Perform search
-    fn search(&self) -> SearchResult {
-        // Placeholder search result
-        SearchResult {
-            best_move: Some(Move::new(
-                crate::bitboard::Square::E2,
-                crate::bitboard::Square::E4,
-            )),
-            score: 20,
-            nodes_searched: 1000,
-        }
+    fn search(&mut self) -> SearchResult {
+        // Use iterative deepening with the current position
+        let max_depth = 4; // This can be made configurable
+        iterative_deepening(
+            max_depth,
+            self.position.side_to_move,
+            &mut self.tt,
+            &self.evaluator,
+            &self.position,
+        )
     }
 }
 

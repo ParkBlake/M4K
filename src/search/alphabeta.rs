@@ -24,7 +24,7 @@ pub fn alpha_beta_search(
     color: Color,
     tt: &mut TranspositionTable,
     evaluator: &Evaluator,
-    // Position parameters would be passed here
+    position: &crate::bitboard::position::Position,
 ) -> SearchResult {
     let mut result = SearchResult {
         best_move: None,
@@ -33,7 +33,8 @@ pub fn alpha_beta_search(
     };
 
     // Check transposition table
-    if let Some(tt_entry) = tt.probe(0) {
+    let pos_hash = position.zobrist_hash().value();
+    if let Some(tt_entry) = tt.probe(pos_hash) {
         if tt_entry.depth >= depth {
             match tt_entry.node_type {
                 crate::search::transposition::NodeType::Exact => {
@@ -62,7 +63,7 @@ pub fn alpha_beta_search(
 
     // Base case: depth 0, go to quiescence
     if depth == 0 {
-        result.score = quiescence_search(alpha, beta, color, evaluator /*, position */);
+        result.score = quiescence_search(alpha, beta, color, evaluator, position);
         return result;
     }
 
@@ -79,8 +80,15 @@ pub fn alpha_beta_search(
         // make_move(position, mv);
 
         // Recursive search with negated score
-        let child_result =
-            alpha_beta_search(depth - 1, -beta, -alpha, color.opposite(), tt, evaluator);
+        let child_result = alpha_beta_search(
+            depth - 1,
+            -beta,
+            -alpha,
+            color.opposite(),
+            tt,
+            evaluator,
+            position,
+        );
 
         let score = -child_result.score;
         result.nodes_searched += child_result.nodes_searched;
@@ -107,7 +115,7 @@ pub fn alpha_beta_search(
     // Store in transposition table
     if let Some(mv) = best_move {
         tt.store(
-            0,
+            pos_hash,
             TTEntry {
                 score: best_score,
                 best_move: mv,
@@ -126,6 +134,7 @@ pub fn iterative_deepening(
     color: Color,
     tt: &mut TranspositionTable,
     evaluator: &Evaluator,
+    position: &crate::bitboard::position::Position,
 ) -> SearchResult {
     let mut result = SearchResult {
         best_move: None,
@@ -134,8 +143,15 @@ pub fn iterative_deepening(
     };
 
     for depth in 1..=max_depth {
-        let window_result =
-            alpha_beta_search(depth, i32::MIN / 2, i32::MAX / 2, color, tt, evaluator);
+        let window_result = alpha_beta_search(
+            depth,
+            i32::MIN / 2,
+            i32::MAX / 2,
+            color,
+            tt,
+            evaluator,
+            position,
+        );
 
         result = window_result;
 
@@ -155,6 +171,7 @@ mod tests {
         let mut tt = TranspositionTable::new();
         let evaluator = Evaluator::new();
 
+        let dummy_position = crate::bitboard::position::Position::empty();
         let result = alpha_beta_search(
             1,
             i32::MIN / 2,
@@ -162,6 +179,7 @@ mod tests {
             Color::White,
             &mut tt,
             &evaluator,
+            &dummy_position,
         );
 
         // In a real test, we'd have a position and check the result

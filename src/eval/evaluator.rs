@@ -20,7 +20,7 @@ impl Evaluator {
     /// Evaluate a position from the perspective of the side to move
     ///
     /// Returns a score in centipawns where positive scores favor the side to move.
-    pub fn evaluate(&self /* position parameters would go here */) -> i32 {
+    pub fn evaluate(&self, position: &crate::bitboard::position::Position) -> i32 {
         // Placeholder evaluation - just material for now
         // In a real implementation, this would combine:
         // - Material balance
