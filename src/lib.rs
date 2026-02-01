@@ -1,4 +1,4 @@
-//! PI5 Chess Engine - High-performance chess engine for Raspberry Pi 5
+//! M4K Chess Engine - High-performance chess engine for Raspberry Pi 5
 //!
 //! This engine uses ARM Neon SIMD instructions extensively for maximum performance.
 
@@ -16,7 +16,7 @@ pub mod uci;
 pub mod utils;
 
 // Re-export commonly used types
-pub use bitboard::{Bitboard, Square, Piece, Color, CastleRights};
+pub use bitboard::{Bitboard, CastleRights, Color, Piece, Square};
 pub use movegen::{Move, MoveList};
 pub use search::SearchEngine;
 pub use uci::UciEngine;
